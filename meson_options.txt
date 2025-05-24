@@ -1,0 +1,2 @@
+option('error-callback',    type: 'boolean', value: false, description: 'Turn on error callbacks')
+option('verbose',           type: 'boolean', value: false, description: 'Turn on verbose messaging' )

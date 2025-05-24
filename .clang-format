@@ -1,0 +1,97 @@
+
+
+# ForEachMacros:
+# - foreach
+# - Q_FOREACH
+# - BOOST_FOREACH
+# IncludeCategories:
+# - Priority: 2
+#   Regex: ^"(llvm|llvm-c|clang|clang-c)/
+# - Priority: 3
+#   Regex: ^(<|"(gtest|gmock|isl|json)/)
+# - Priority: 1
+#   Regex: .*
+# IncludeIsMainRegex: (Test)?$
+
+---
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+DisableFormat: false
+---
+Language: Cpp
+Standard: Latest
+
+
+SpacesInSquareBrackets: false
+SpacesInParentheses: false
+SpacesInContainerLiterals: true
+SpacesInCStyleCastParentheses: false
+SpacesInAngles: false
+SpacesBeforeTrailingComments: 2
+SpaceInEmptyParentheses: false
+SpaceBeforeParens: ControlStatements
+SpaceBeforeAssignmentOperators: true
+SpaceAfterTemplateKeyword: false
+SpaceAfterCStyleCast: false
+SortUsingDeclarations: Lexicographic 
+SortIncludes: true
+ReflowComments: true
+DerivePointerAlignment: false
+PointerAlignment: Left
+NamespaceIndentation: None
+MaxEmptyLinesToKeep: 2
+MacroBlockEnd: ''
+MacroBlockBegin: ''
+KeepEmptyLinesAtTheStartOfBlocks: true
+IndentWrappedFunctionNames: true
+IndentCaseLabels: true
+FixNamespaceComments: true
+ExperimentalAutoDetectBinPacking: true
+Cpp11BracedListStyle: false
+ContinuationIndentWidth: 2
+ConstructorInitializerIndentWidth: 2
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+CompactNamespaces: false
+ColumnLimit: 80
+BreakStringLiterals: true
+BreakConstructorInitializersBeforeComma: false
+BreakConstructorInitializers: BeforeColon
+BreakBeforeTernaryOperators: true
+BreakBeforeInheritanceComma: true
+BreakBeforeBraces: Custom
+BreakBeforeBinaryOperators: NonAssignment
+BraceWrapping:
+  AfterClass: false
+  AfterControlStatement: false
+  AfterEnum: false
+  AfterFunction: false
+  AfterNamespace: false
+  AfterObjCDeclaration: false
+  AfterStruct: false
+  AfterUnion: false
+  BeforeCatch: false
+  BeforeElse: true
+  IndentBraces: false
+  SplitEmptyFunction: false
+  SplitEmptyNamespace: false
+  SplitEmptyRecord: false
+BinPackParameters: false
+BinPackArguments: false
+AlwaysBreakTemplateDeclarations: true
+AlwaysBreakBeforeMultilineStrings: false
+AlwaysBreakAfterReturnType: None
+AlwaysBreakAfterDefinitionReturnType: None
+AllowShortLoopsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Empty
+AllowAllParametersOfDeclarationOnNextLine: false
+AlignTrailingComments: Always
+AlignOperands: true
+AlignEscapedNewlines: Left
+AlignConsecutiveDeclarations: false
+AlignConsecutiveAssignments: false
+AlignAfterOpenBracket: DontAlign
+AccessModifierOffset: -4
