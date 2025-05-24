@@ -1,0 +1,7 @@
+libs/**	linguist-vendored
+
+*.c	linguist-language=C
+*.h	linguist-language=C
+*.cpp	linguist-language=C++
+*.hpp	linguist-language=C++
+*.build linguist-language=Meson
