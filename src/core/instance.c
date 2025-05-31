@@ -1,4 +1,6 @@
 #include "instance.h"
+#include "window.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,48 +27,74 @@ struct EInstance_t {
 };
 
 #if E_ENABLE_ERROR_CALLBACK
-
-// Debug callbacks
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsCallback(
   VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
   VkDebugUtilsMessageTypeFlagsEXT messageTypes,
   const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-  void* pUserData) {
-    (void)pUserData;
-    (void)messageTypes;
-    (void)messageSeverity;
-    (void)fprintf(
-      stderr, "(Vulkan) validation layer: %s\n", pCallbackData->pMessage);
-    return VK_FALSE;
-}
+  void* pUserData);
 
 static VkResult CreateDebugUtilsMessengerEXT(VkInstance instance,
   const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
   const VkAllocationCallbacks* pAllocator,
-  VkDebugUtilsMessengerEXT* pDebugMessenger) {
-
-    PFN_vkVoidFunction func =
-      vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-    if (func) {
-        return ((PFN_vkCreateDebugUtilsMessengerEXT)func)(
-          instance, pCreateInfo, pAllocator, pDebugMessenger);
-    }
-
-    return VK_ERROR_EXTENSION_NOT_PRESENT;
-}
+  VkDebugUtilsMessengerEXT* pDebugMessenger);
 
 static void DestroyDebugUtilsMessengerEXT(VkInstance instance,
   VkDebugUtilsMessengerEXT debugMessenger,
-  const VkAllocationCallbacks* pAllocator) {
+  const VkAllocationCallbacks* pAllocator);
+#endif
 
-    PFN_vkVoidFunction func =
-      vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-    if (func) {
-        ((PFN_vkDestroyDebugUtilsMessengerEXT)func)(
-          instance, debugMessenger, pAllocator);
+static void SelectPhysicalDevice(EInstance instance);
+static void SelectGraphicsQueueFamilyIndex(EInstance instance);
+static void CreateLogicalDevice(EInstance instance);
+static void CreateDescriptorPool(EInstance instance);
+static void CreateInstance(EInstance instance);
+static void CreateSwapchain(EInstance instance, EWindow window);
+
+// VkInstance initialization
+E_EXTERN void eCreateInstance(EInstance instanceOut[static 1], EWindow window) {
+    if (!instanceOut) {
+        return;
+    }
+    EInstance instance = malloc(sizeof(*instance));
+    if (!instance) {
+        *instanceOut = NULL;
+        return;
+    }
+    *instanceOut = instance;
+    *instance = (struct EInstance_t){ 0 };
+
+    CreateInstance(instance);
+    SelectPhysicalDevice(instance);
+    SelectGraphicsQueueFamilyIndex(instance);
+    CreateLogicalDevice(instance);
+    CreateDescriptorPool(instance);
+    CreateSwapchain(instance, window);
+}
+
+// cleanup
+E_EXTERN void eDestroyInstance(EInstance instance) {
+    free(instance->exts);
+#if E_ENABLE_ERROR_CALLBACK
+    DestroyDebugUtilsMessengerEXT(
+      instance->instance, instance->debugMessenger, NULL);
+#endif
+    vkDestroySurfaceKHR(instance->instance, instance->surface, NULL);
+    vkDestroyDescriptorPool(instance->device, instance->descriptorPool, NULL);
+    vkDestroyDevice(instance->device, NULL);
+    vkDestroyInstance(instance->instance, NULL);
+    free(instance);
+}
+
+static void CreateSwapchain(EInstance instance, EWindow window) {
+    if (instance->result != E_SUCCESS) {
+        return;
+    }
+    VkResult err = glfwCreateWindowSurface(
+      instance->instance, eGetGlfwWindow(window), NULL, &instance->surface);
+    if (err != VK_SUCCESS) {
+        instance->result = E_GLFW_FAILURE;
     }
 }
-#endif
 
 static void SelectPhysicalDevice(EInstance instance) {
     if (instance->result != E_SUCCESS) {
@@ -195,6 +223,49 @@ static void CreateDescriptorPool(EInstance instance) {
     }
 }
 
+#if E_ENABLE_ERROR_CALLBACK
+// Debug callbacks
+static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsCallback(
+  VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+  VkDebugUtilsMessageTypeFlagsEXT messageTypes,
+  const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+  void* pUserData) {
+    (void)pUserData;
+    (void)messageTypes;
+    (void)messageSeverity;
+    (void)fprintf(
+      stderr, "(Vulkan) validation layer: %s\n", pCallbackData->pMessage);
+    return VK_FALSE;
+}
+
+static VkResult CreateDebugUtilsMessengerEXT(VkInstance instance,
+  const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+  const VkAllocationCallbacks* pAllocator,
+  VkDebugUtilsMessengerEXT* pDebugMessenger) {
+
+    PFN_vkVoidFunction func =
+      vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+    if (func) {
+        return ((PFN_vkCreateDebugUtilsMessengerEXT)func)(
+          instance, pCreateInfo, pAllocator, pDebugMessenger);
+    }
+
+    return VK_ERROR_EXTENSION_NOT_PRESENT;
+}
+
+static void DestroyDebugUtilsMessengerEXT(VkInstance instance,
+  VkDebugUtilsMessengerEXT debugMessenger,
+  const VkAllocationCallbacks* pAllocator) {
+
+    PFN_vkVoidFunction func =
+      vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
+    if (func) {
+        ((PFN_vkDestroyDebugUtilsMessengerEXT)func)(
+          instance, debugMessenger, pAllocator);
+    }
+}
+#endif
+
 static void CreateInstance(EInstance instance) {
     if (instance->result != E_SUCCESS) {
         return;
@@ -215,7 +286,7 @@ static void CreateInstance(EInstance instance) {
 #ifdef VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME
         VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
 #endif
-#ifdef E_ENABLE_ERROR_CALLBACK
+#if E_ENABLE_ERROR_CALLBACK
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
 #endif
     };
@@ -226,7 +297,7 @@ static void CreateInstance(EInstance instance) {
 #ifdef VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME
     ici.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 #endif
-#ifdef E_ENABLE_ERROR_CALLBACK
+#if E_ENABLE_ERROR_CALLBACK
     const char* layers[] = { "VK_LAYER_KHRONOS_validation" };
     ici.enabledLayerCount = 1;
     ici.ppEnabledLayerNames = layers;
@@ -318,37 +389,4 @@ static void CreateInstance(EInstance instance) {
         instance->result = E_FAILURE;
     }
 #endif
-}
-
-// VkInstance initialization
-E_EXTERN void eCreateInstance(EInstance instanceOut[static 1]) {
-    if (!instanceOut) {
-        return;
-    }
-    EInstance instance = malloc(sizeof(*instance));
-    if (!instance) {
-        *instanceOut = NULL;
-        return;
-    }
-    *instanceOut = instance;
-    *instance = (struct EInstance_t){ 0 };
-
-    CreateInstance(instance);
-    SelectPhysicalDevice(instance);
-    SelectGraphicsQueueFamilyIndex(instance);
-    CreateLogicalDevice(instance);
-    CreateDescriptorPool(instance);
-}
-
-// cleanup
-E_EXTERN void eDestroyInstance(EInstance instance) {
-    free(instance->exts);
-#if E_ENABLE_ERROR_CALLBACK
-    DestroyDebugUtilsMessengerEXT(
-      instance->instance, instance->debugMessenger, NULL);
-#endif
-    vkDestroyDescriptorPool(instance->device, instance->descriptorPool, NULL);
-    vkDestroyDevice(instance->device, NULL);
-    vkDestroyInstance(instance->instance, NULL);
-    free(instance);
 }

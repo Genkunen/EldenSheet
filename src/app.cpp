@@ -11,7 +11,7 @@ App::App(AppCreateInfo& info) {
     wci.title = info.title;
     wci.size = { info.size.width, info.size.height };
     m_window = eCreateWindow(&wci);
-    eCreateInstance(&m_instance);
+    eCreateInstance(&m_instance, m_window);
     if (eGetResult(m_instance) != E_SUCCESS) {
         std::cerr << "Error:\n"
                   << "Window: " << eGetResult(m_window) << "\n"
