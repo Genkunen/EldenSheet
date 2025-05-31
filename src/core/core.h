@@ -18,6 +18,8 @@ typedef enum E_RESULT {
     E_GLFW_FAILURE,
     E_ENUMERATE_FAILURE,
     E_CREATE_INSTANCE_FAILURE,
+    E_CREATE_DEVICE_FAILURE,
+    E_CREATE_DESCRIPTOR_POOL_FAILURE,
 
     E_CREATE_INFO_MISSING,
     E_CREATE_INFO_MISSING_VALUE,
@@ -41,5 +43,6 @@ typedef struct EWindowCreateInfo {
     } size;
 } EWindowCreateInfo;
 
+E_OPAQUE_HANDLE(EDevice);
 E_OPAQUE_HANDLE(EInstance);
 E_OPAQUE_HANDLE(EWindow);

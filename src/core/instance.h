@@ -2,5 +2,5 @@
 
 #include "core.h"
 
-E_EXTERN EInstance eCreateInstance(void);
+E_EXTERN void eCreateInstance(EInstance* instanceOut);
 E_EXTERN void eDestroyInstance(EInstance instance);

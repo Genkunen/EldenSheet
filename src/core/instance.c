@@ -16,42 +16,15 @@ struct EInstance_t {
     VkDebugUtilsMessengerEXT debugMessenger;
 #endif
     VkPhysicalDevice physicalDevice;
+    VkDevice device;
+    VkQueue queue;
+    VkDescriptorPool descriptorPool;
+    VkSurfaceKHR surface;
     uint32_t extsCount;
     uint32_t graphicsQueueFamilyIndex;
 };
 
 #if E_ENABLE_ERROR_CALLBACK
-static VkBool32 IsValidationLayerSupported(void) {
-    VkResult err = { 0 };
-    uint32_t layerCount = { 0 };
-
-    err = vkEnumerateInstanceLayerProperties(&layerCount, NULL);
-    if (err != VK_SUCCESS) {
-        return 0;
-    }
-    VkLayerProperties* layers = malloc(sizeof(*layers) * layerCount);
-    if (!layers) {
-        return 0;
-    }
-    err = vkEnumerateInstanceLayerProperties(&layerCount, layers);
-    if (err != VK_SUCCESS) {
-        free(layers);
-        return 0;
-    }
-
-#if E_VERBOSE_MESSAGING
-    printf("Available layers:\n");
-    for (int i = 0; i < layerCount; ++i) {
-        printf("\t%s - %s\n", layers[i].layerName, layers[i].description);
-    }
-#endif
-    for (int i = 0; i < layerCount; ++i) {
-        if (strcmp("VK_LAYER_KHRONOS_validation", layers[i].layerName) == 0) {
-            return 1;
-        }
-    }
-    return 0;
-}
 
 // Debug callbacks
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsCallback(
@@ -158,22 +131,82 @@ static void SelectGraphicsQueueFamilyIndex(EInstance instance) {
     instance->result = E_NO_AVAILABLE_GRAPHICS_QUEUES;
 }
 
-// VkInstance initialization
-E_EXTERN EInstance eCreateInstance(void) {
-    EInstance res = malloc(sizeof(*res));
-    if (!res) {
-        return NULL;
+static void CreateLogicalDevice(EInstance instance) {
+    if (instance->result != E_SUCCESS) {
+        return;
     }
-    *res = (struct EInstance_t){ 0 };
 
+    VkResult err = { 0 };
+
+    const char* deviceExt[1] = { "VK_KHR_swapchain" };
+    const float queuePriorities[1] = { 1.f };
+
+    VkDeviceQueueCreateInfo dqcis[1] = { (VkDeviceQueueCreateInfo){
+      .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+      .pQueuePriorities = queuePriorities,
+      .queueCount = 1,
+      .queueFamilyIndex = instance->graphicsQueueFamilyIndex,
+    } };
+
+    VkDeviceCreateInfo dci = (VkDeviceCreateInfo){
+        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .enabledExtensionCount = sizeof(deviceExt) / sizeof(*deviceExt),
+        .ppEnabledExtensionNames = deviceExt,
+        .queueCreateInfoCount = sizeof(dqcis) / sizeof(*dqcis),
+        .pQueueCreateInfos = dqcis,
+    };
+
+    err =
+      vkCreateDevice(instance->physicalDevice, &dci, NULL, &instance->device);
+    if (err != VK_SUCCESS) {
+        instance->result = E_CREATE_DEVICE_FAILURE;
+        return;
+    }
+
+    vkGetDeviceQueue(instance->device,
+      instance->graphicsQueueFamilyIndex,
+      0,
+      &instance->queue);
+}
+
+static void CreateDescriptorPool(EInstance instance) {
+    if (instance->result != E_SUCCESS) {
+        return;
+    }
+    VkResult err = { 0 };
+    VkDescriptorPoolSize poolSizes[] = {
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 },
+    };
+    uint32_t maxSets = { 0 };
+    for (int i = 0; i < sizeof(poolSizes) / sizeof(*poolSizes); ++i) {
+        maxSets += poolSizes[i].descriptorCount;
+    }
+    VkDescriptorPoolCreateInfo dpci = (VkDescriptorPoolCreateInfo){
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+        .pPoolSizes = poolSizes,
+        .poolSizeCount = sizeof(poolSizes) / sizeof(*poolSizes),
+        .maxSets = maxSets,
+    };
+    err = vkCreateDescriptorPool(
+      instance->device, &dpci, NULL, &instance->descriptorPool);
+    if (err != VK_SUCCESS) {
+        instance->result = E_CREATE_DESCRIPTOR_POOL_FAILURE;
+    }
+}
+
+static void CreateInstance(EInstance instance) {
+    if (instance->result != E_SUCCESS) {
+        return;
+    }
     VkResult err = { 0 };
 
     const char** reqExt = { NULL };
     uint32_t reqExtCount = { 0 };
     reqExt = glfwGetRequiredInstanceExtensions(&reqExtCount);
     if (!reqExt) {
-        res->result = E_GLFW_FAILURE;
-        return res;
+        instance->result = E_GLFW_FAILURE;
+        return;
     }
 
     // additional required extensions
@@ -215,22 +248,25 @@ E_EXTERN EInstance eCreateInstance(void) {
     uint32_t propCount = { 0 };
     err = vkEnumerateInstanceExtensionProperties(NULL, &propCount, NULL);
     if (err != VK_SUCCESS) {
-        res->result = E_ENUMERATE_FAILURE;
-        return res;
+        instance->result = E_ENUMERATE_FAILURE;
+        return;
     }
 
     props = malloc(sizeof(*props) * propCount);
     // Worst case scenario malloc. Small sizes so doesn't really matter.
-    res->exts = malloc(sizeof(*res->exts) * (propCount + addReqExtCount));
-    if (!props || !res->exts) {
-        res->result = E_MALLOC_FAILURE;
-        return res;
+    instance->exts =
+      malloc(sizeof(*instance->exts) * (propCount + addReqExtCount));
+    if (!props || !instance->exts) {
+        free(props);
+        instance->result = E_MALLOC_FAILURE;
+        return;
     }
 
     err = vkEnumerateInstanceExtensionProperties(NULL, &propCount, props);
     if (err != VK_SUCCESS) {
-        res->result = E_ENUMERATE_FAILURE;
-        return res;
+        instance->result = E_ENUMERATE_FAILURE;
+        free(props);
+        return;
     }
 
 #if E_VERBOSE_MESSAGING
@@ -238,7 +274,7 @@ E_EXTERN EInstance eCreateInstance(void) {
     for (int i = 0; i < propCount; ++i) {
         printf("\t%s\n", props[i].extensionName);
     }
-    printf("Required extensions:\n");
+    printf("Required Vulkan extensions:\n");
     for (int i = 0; i < reqExtCount; ++i) {
         printf("\t%s\n", reqExt[i]);
     }
@@ -253,41 +289,55 @@ E_EXTERN EInstance eCreateInstance(void) {
         // searching through all of glfw's required extensions
         for (int j = 0; j < reqExtCount; ++j) {
             if (strcmp(props[i].extensionName, reqExt[j]) == 0) {
-                res->exts[addNext++] = props[i].extensionName;
+                instance->exts[addNext++] = props[i].extensionName;
             }
         }
         // searching through all of additional required extensions
         for (int j = 0; j < addReqExtCount; ++j) {
             if (strcmp(props[i].extensionName, addReqExt[j]) == 0) {
-                res->exts[addNext++] = props[i].extensionName;
+                instance->exts[addNext++] = props[i].extensionName;
             }
         }
     }
-    res->extsCount = addNext;
+    instance->extsCount = addNext;
 
-    ici.enabledExtensionCount = res->extsCount;
-    ici.ppEnabledExtensionNames = res->exts;
-    err = vkCreateInstance(&ici, NULL, &res->instance);
+    ici.enabledExtensionCount = instance->extsCount;
+    ici.ppEnabledExtensionNames = instance->exts;
+    err = vkCreateInstance(&ici, NULL, &instance->instance);
     if (err != VK_SUCCESS) {
-        res->result = E_CREATE_INSTANCE_FAILURE;
-        return res;
+        instance->result = E_CREATE_INSTANCE_FAILURE;
+        free(props);
+        return;
     }
+    free(props);
 
 #if E_ENABLE_ERROR_CALLBACK
     err = CreateDebugUtilsMessengerEXT(
-      res->instance, &duimci, NULL, &res->debugMessenger);
+      instance->instance, &duimci, NULL, &instance->debugMessenger);
     if (err != VK_SUCCESS) {
-        res->result = E_FAILURE;
-        return res;
+        instance->result = E_FAILURE;
     }
 #endif
+}
 
-    free(props);
+// VkInstance initialization
+E_EXTERN void eCreateInstance(EInstance instanceOut[static 1]) {
+    if (!instanceOut) {
+        return;
+    }
+    EInstance instance = malloc(sizeof(*instance));
+    if (!instance) {
+        *instanceOut = NULL;
+        return;
+    }
+    *instanceOut = instance;
+    *instance = (struct EInstance_t){ 0 };
 
-    SelectPhysicalDevice(res);
-    SelectGraphicsQueueFamilyIndex(res);
-
-    return res;
+    CreateInstance(instance);
+    SelectPhysicalDevice(instance);
+    SelectGraphicsQueueFamilyIndex(instance);
+    CreateLogicalDevice(instance);
+    CreateDescriptorPool(instance);
 }
 
 // cleanup
@@ -297,6 +347,8 @@ E_EXTERN void eDestroyInstance(EInstance instance) {
     DestroyDebugUtilsMessengerEXT(
       instance->instance, instance->debugMessenger, NULL);
 #endif
-    free(instance);
+    vkDestroyDescriptorPool(instance->device, instance->descriptorPool, NULL);
+    vkDestroyDevice(instance->device, NULL);
     vkDestroyInstance(instance->instance, NULL);
+    free(instance);
 }
