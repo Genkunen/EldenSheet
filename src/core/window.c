@@ -24,20 +24,25 @@ static void GlfwErrorCallback(int error, const char* description) {
 #endif
 
 // GLFW initialization
-EWindow eCreateWindow(EWindowCreateInfo* infoIn) {
-    EWindow res = malloc(sizeof(*res));
-    if (!res) {
-        return NULL;
+void eCreateWindow(EWindow* windowOut, EWindowCreateInfo* infoIn) {
+    if (!windowOut) {
+        return;
     }
-    *res = (struct EWindow_t){ 0 };
+    EWindow window = malloc(sizeof(*window));
+    if (!window) {
+        *windowOut = NULL;
+        return;
+    }
+    *windowOut = window;
+    *window = (struct EWindow_t){ 0 };
 
     if (!infoIn) {
-        res->result = E_CREATE_INFO_MISSING;
-        return res;
+        window->result = E_CREATE_INFO_MISSING;
+        return;
     }
     if (!infoIn->title || !infoIn->size.width || !infoIn->size.height) {
-        res->result = E_CREATE_INFO_MISSING_VALUE;
-        return res;
+        window->result = E_CREATE_INFO_MISSING_VALUE;
+        return;
     }
 
 #if E_ENABLE_ERROR_CALLBACK
@@ -45,17 +50,15 @@ EWindow eCreateWindow(EWindowCreateInfo* infoIn) {
 #endif
 
     if (!glfwInit()) {
-        res->result = E_GLFW_FAILURE;
-        return res;
+        window->result = E_GLFW_FAILURE;
+        return;
     }
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    res->window = glfwCreateWindow(
+    window->window = glfwCreateWindow(
       infoIn->size.width, infoIn->size.height, infoIn->title, NULL, NULL);
     if (!glfwVulkanSupported()) {
-        res->result = E_GLFW_FAILURE;
-        return res;
+        window->result = E_GLFW_FAILURE;
     }
-    return res;
 }
 
 // cleanup
