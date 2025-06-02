@@ -22,6 +22,8 @@ struct EInstance_t {
     VkQueue queue;
     VkDescriptorPool descriptorPool;
     VkSurfaceKHR surface;
+    VkSurfaceFormatKHR surfaceFormat;
+    VkPresentModeKHR presentMode;
     uint32_t extsCount;
     uint32_t graphicsQueueFamilyIndex;
 };
@@ -48,7 +50,8 @@ static void SelectGraphicsQueueFamilyIndex(EInstance instance);
 static void CreateLogicalDevice(EInstance instance);
 static void CreateDescriptorPool(EInstance instance);
 static void CreateInstance(EInstance instance);
-static void CreateSwapchain(EInstance instance, EWindow window);
+static void CreateWindowSurface(EInstance instance, EWindow window);
+static void SelectSurfaceFormat(EInstance instance);
 
 // VkInstance initialization
 E_EXTERN void eCreateInstance(EInstance instanceOut[static 1], EWindow window) {
@@ -68,7 +71,8 @@ E_EXTERN void eCreateInstance(EInstance instanceOut[static 1], EWindow window) {
     SelectGraphicsQueueFamilyIndex(instance);
     CreateLogicalDevice(instance);
     CreateDescriptorPool(instance);
-    CreateSwapchain(instance, window);
+    CreateWindowSurface(instance, window);
+    SelectSurfaceFormat(instance);
 }
 
 // cleanup
@@ -85,7 +89,78 @@ E_EXTERN void eDestroyInstance(EInstance instance) {
     free(instance);
 }
 
-static void CreateSwapchain(EInstance instance, EWindow window) {
+static void SelectSurfaceFormat(EInstance instance) {
+    if (instance->result != E_SUCCESS) {
+        return;
+    }
+    VkResult err = { 0 };
+    VkBool32 res = { 0 };
+    err = vkGetPhysicalDeviceSurfaceSupportKHR(instance->physicalDevice,
+      instance->graphicsQueueFamilyIndex,
+      instance->surface,
+      &res);
+    if (err != VK_SUCCESS || res != VK_TRUE) {
+        instance->result = E_NO_AVAILABLE_WSI_SUPPORT;
+        return;
+    }
+    const VkFormat reqFmts[4] = {
+        VK_FORMAT_B8G8R8A8_UNORM,
+        VK_FORMAT_R8G8B8A8_UNORM,
+        VK_FORMAT_B8G8R8_UNORM,
+        VK_FORMAT_R8G8B8_UNORM,
+    };
+    const VkColorSpaceKHR reqColorSpace = { VK_COLORSPACE_SRGB_NONLINEAR_KHR };
+
+    uint32_t srfFmtCount = { 0 };
+    err = vkGetPhysicalDeviceSurfaceFormatsKHR(
+      instance->physicalDevice, instance->surface, &srfFmtCount, NULL);
+    if (err != VK_SUCCESS) {
+        instance->result = E_ENUMERATE_FAILURE;
+        return;
+    }
+    VkSurfaceFormatKHR* srfFmts = malloc(sizeof(*srfFmts) * srfFmtCount);
+    if (!srfFmts) {
+        instance->result = E_MALLOC_FAILURE;
+        return;
+    }
+    err = vkGetPhysicalDeviceSurfaceFormatsKHR(
+      instance->physicalDevice, instance->surface, &srfFmtCount, srfFmts);
+    if (err != VK_SUCCESS) {
+        instance->result = E_ENUMERATE_FAILURE;
+        goto return_early;
+    }
+
+    if (srfFmtCount == 1) {
+        if (srfFmts[0].format == VK_FORMAT_UNDEFINED) {
+            instance->surfaceFormat.format = VK_FORMAT_B8G8R8A8_UNORM;
+            instance->surfaceFormat.colorSpace =
+              VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+            goto return_early;
+        }
+        instance->surfaceFormat = srfFmts[0];
+        goto return_early;
+    }
+
+    VkSurfaceFormatKHR* fmt = { NULL };
+    const VkFormat* reqFmt = { NULL };
+    uint32_t reqFmtSize = sizeof(reqFmts) / sizeof(*reqFmts);
+
+    // search if requested format is found
+    for (fmt = srfFmts; fmt != srfFmts + srfFmtCount; ++fmt) {
+        for (reqFmt = reqFmts; reqFmt != reqFmts + reqFmtSize; reqFmt++) {
+            if (fmt->format == *reqFmt && fmt->colorSpace == reqColorSpace) {
+                instance->surfaceFormat = *fmt;
+                goto return_early;
+            }
+        }
+    }
+    // if none found use whatever first available
+    instance->surfaceFormat = *srfFmts;
+return_early:
+    free(srfFmts);
+}
+
+static void CreateWindowSurface(EInstance instance, EWindow window) {
     if (instance->result != E_SUCCESS) {
         return;
     }
