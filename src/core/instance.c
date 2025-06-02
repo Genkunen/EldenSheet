@@ -13,7 +13,6 @@
 struct EInstance_t {
     EResult result;
     VkInstance instance;
-    const char** exts;
 #if E_ENABLE_ERROR_CALLBACK
     VkDebugUtilsMessengerEXT debugMessenger;
 #endif
@@ -22,6 +21,7 @@ struct EInstance_t {
     VkQueue queue;
     VkDescriptorPool descriptorPool;
     VkSurfaceKHR surface;
+    const char** exts;
     VkSurfaceFormatKHR surfaceFormat;
     VkPresentModeKHR presentMode;
     uint32_t extsCount;
@@ -52,6 +52,7 @@ static void CreateDescriptorPool(EInstance instance);
 static void CreateInstance(EInstance instance);
 static void CreateWindowSurface(EInstance instance, EWindow window);
 static void SelectSurfaceFormat(EInstance instance);
+static void SelectPresentMode(EInstance instance);
 
 // VkInstance initialization
 E_EXTERN void eCreateInstance(EInstance instanceOut[static 1], EWindow window) {
@@ -73,6 +74,7 @@ E_EXTERN void eCreateInstance(EInstance instanceOut[static 1], EWindow window) {
     CreateDescriptorPool(instance);
     CreateWindowSurface(instance, window);
     SelectSurfaceFormat(instance);
+    SelectPresentMode(instance);
 }
 
 // cleanup
@@ -87,6 +89,16 @@ E_EXTERN void eDestroyInstance(EInstance instance) {
     vkDestroyDevice(instance->device, NULL);
     vkDestroyInstance(instance->instance, NULL);
     free(instance);
+}
+
+static void SelectPresentMode(EInstance instance) {
+    if (instance->result != E_SUCCESS) {
+        return;
+    }
+    VkResult err = { 0 };
+    // FIFO is the only REQUIRED to exist present mode by Vulkan
+    // and I think its irrelevant to use any other?
+    instance->presentMode = VK_PRESENT_MODE_FIFO_KHR;
 }
 
 static void SelectSurfaceFormat(EInstance instance) {
@@ -373,7 +385,7 @@ static void CreateInstance(EInstance instance) {
     ici.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 #endif
 #if E_ENABLE_ERROR_CALLBACK
-    const char* layers[] = { "VK_LAYER_KHRONOS_validation" };
+    const char* layers[1] = { "VK_LAYER_KHRONOS_validation" };
     ici.enabledLayerCount = 1;
     ici.ppEnabledLayerNames = layers;
     // IsValidationLayerSupported()
@@ -381,7 +393,8 @@ static void CreateInstance(EInstance instance) {
       (VkDebugUtilsMessengerCreateInfoEXT){
           .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
           .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
-                             | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+                             | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT
+                             | VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT,
           .messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
                          | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
                          | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
