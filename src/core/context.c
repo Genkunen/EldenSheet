@@ -29,13 +29,10 @@ static void SelectGraphicsQueueFamilyIndex(EContext context);
 static void CreateLogicalDevice(EContext context);
 static void CreateDescriptorPool(EContext context);
 static void CreateInstance(EContext context);
-static void CreateWindowSurface(EContext context, EWindow window);
-static void SelectSurfaceFormat(EContext context);
-static void SelectPresentMode(EContext context);
-static void CreateSwapchain(EContext context, EWindow window);
+
 
 // VkInstance initialization
-E_EXTERN void eCreateContext(EContext contextOut[static 1], EWindow window) {
+E_EXTERN void eCreateContext(EContext* contextOut) {
     if (!contextOut) {
         return;
     }
@@ -52,10 +49,10 @@ E_EXTERN void eCreateContext(EContext contextOut[static 1], EWindow window) {
     SelectGraphicsQueueFamilyIndex(context);
     CreateLogicalDevice(context);
     CreateDescriptorPool(context);
-    CreateWindowSurface(context, window);
-    SelectSurfaceFormat(context);
-    SelectPresentMode(context);
-    CreateSwapchain(context, window);
+    // CreateWindowSurface(context, window);
+    // SelectSurfaceFormat(context);
+    // SelectPresentMode(context);
+    // CreateSwapchain(context, window);
 }
 
 // cleanup
@@ -65,156 +62,10 @@ E_EXTERN void eDestroyContext(EContext context) {
     DestroyDebugUtilsMessengerEXT(
       context->instance, context->debugMessenger, NULL);
 #endif
-    vkDestroySurfaceKHR(context->instance, context->surface, NULL);
     vkDestroyDescriptorPool(context->device, context->descriptorPool, NULL);
     vkDestroyDevice(context->device, NULL);
     vkDestroyInstance(context->instance, NULL);
     free(context);
-}
-
-static void CreateSwapchain(EContext context, EWindow window) {
-    if (context->result != E_SUCCESS || eGetResult(window) != E_SUCCESS) {
-        return;
-    }
-    VkResult err = { 0 };
-    VkSwapchainKHR oldSwapchain = context->swapchain;
-    context->swapchain = VK_NULL_HANDLE;
-    err = vkDeviceWaitIdle(context->device);
-    if (err != VK_SUCCESS) {
-        context->result = E_SYNC_FAILURE;
-        return;
-    }
-}
-
-static void SelectPresentMode(EContext context) {
-    if (context->result != E_SUCCESS) {
-        return;
-    }
-    // FIFO is the only REQUIRED to exist present mode by Vulkan
-    // and I think its irrelevant to use any other?
-    context->presentMode = VK_PRESENT_MODE_FIFO_KHR;
-}
-
-static void SelectSurfaceFormat(EContext context) {
-    if (context->result != E_SUCCESS) {
-        return;
-    }
-    VkResult err = { 0 };
-    VkBool32 res = { 0 };
-    err = vkGetPhysicalDeviceSurfaceSupportKHR(context->physicalDevice,
-      context->graphicsQueueFamilyIndex,
-      context->surface,
-      &res);
-    if (err != VK_SUCCESS || res != VK_TRUE) {
-        context->result = E_NO_AVAILABLE_WSI_SUPPORT;
-        return;
-    }
-    const VkFormat reqFmts[4] = {
-        VK_FORMAT_B8G8R8A8_UNORM,
-        VK_FORMAT_R8G8B8A8_UNORM,
-        VK_FORMAT_B8G8R8_UNORM,
-        VK_FORMAT_R8G8B8_UNORM,
-    };
-    const VkColorSpaceKHR reqColorSpace = { VK_COLORSPACE_SRGB_NONLINEAR_KHR };
-
-    uint32_t srfFmtCount = { 0 };
-    err = vkGetPhysicalDeviceSurfaceFormatsKHR(
-      context->physicalDevice, context->surface, &srfFmtCount, NULL);
-    if (err != VK_SUCCESS) {
-        context->result = E_ENUMERATE_FAILURE;
-        return;
-    }
-    VkSurfaceFormatKHR* srfFmts = malloc(sizeof(*srfFmts) * srfFmtCount);
-    if (!srfFmts) {
-        context->result = E_MALLOC_FAILURE;
-        return;
-    }
-    err = vkGetPhysicalDeviceSurfaceFormatsKHR(
-      context->physicalDevice, context->surface, &srfFmtCount, srfFmts);
-    if (err != VK_SUCCESS) {
-        context->result = E_ENUMERATE_FAILURE;
-        goto return_early;
-    }
-
-    if (srfFmtCount == 1) {
-        if (srfFmts[0].format == VK_FORMAT_UNDEFINED) {
-            context->surfaceFormat.format = VK_FORMAT_B8G8R8A8_UNORM;
-            context->surfaceFormat.colorSpace =
-              VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-            goto return_early;
-        }
-        context->surfaceFormat = srfFmts[0];
-        goto return_early;
-    }
-
-    VkSurfaceFormatKHR* fmt = { NULL };
-    const VkFormat* reqFmt = { NULL };
-    uint32_t reqFmtSize = sizeof(reqFmts) / sizeof(*reqFmts);
-
-    // search if requested format is found
-    for (fmt = srfFmts; fmt != srfFmts + srfFmtCount; ++fmt) {
-        for (reqFmt = reqFmts; reqFmt != reqFmts + reqFmtSize; reqFmt++) {
-            if (fmt->format == *reqFmt && fmt->colorSpace == reqColorSpace) {
-                context->surfaceFormat = *fmt;
-                goto return_early;
-            }
-        }
-    }
-    // if none found use whatever first available
-    context->surfaceFormat = *srfFmts;
-return_early:
-    free(srfFmts);
-}
-
-static void CreateWindowSurface(EContext context, struct EWindow_t* window) {
-    if (context->result != E_SUCCESS || eGetResult(window) != E_SUCCESS) {
-        return;
-    }
-    VkResult err = glfwCreateWindowSurface(
-      context->instance, window->window, NULL, &context->surface);
-    if (err != VK_SUCCESS) {
-        context->result = E_GLFW_FAILURE;
-    }
-}
-
-static void SelectPhysicalDevice(EContext context) {
-    if (context->result != E_SUCCESS) {
-        return;
-    }
-    VkResult err = { 0 };
-
-    uint32_t deviceCount = { 0 };
-    err = vkEnumeratePhysicalDevices(context->instance, &deviceCount, NULL);
-    if (err != VK_SUCCESS) {
-        context->result = E_ENUMERATE_FAILURE;
-        return;
-    }
-    VkPhysicalDevice* devices = malloc(sizeof(*devices) * deviceCount);
-    if (!devices) {
-        context->result = E_MALLOC_FAILURE;
-        return;
-    }
-    err = vkEnumeratePhysicalDevices(context->instance, &deviceCount, devices);
-    if (err != VK_SUCCESS) {
-        context->result = E_ENUMERATE_FAILURE;
-        free(devices);
-        return;
-    }
-    VkPhysicalDeviceProperties prop = { 0 };
-    for (int i = 0; i < deviceCount; ++i) {
-        vkGetPhysicalDeviceProperties(devices[i], &prop);
-        if (prop.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
-            context->physicalDevice = devices[i];
-            break;
-        }
-    }
-    if (deviceCount > 0) {
-        context->physicalDevice = devices[0];
-    }
-    else {
-        context->result = E_NO_AVAILABLE_PHYSICAL_DEVICES;
-    }
-    free(devices);
 }
 
 static void SelectGraphicsQueueFamilyIndex(EContext context) {
@@ -468,4 +319,44 @@ static void CreateInstance(EContext context) {
         context->result = E_FAILURE;
     }
 #endif
+}
+
+static void SelectPhysicalDevice(EContext context) {
+    if (context->result != E_SUCCESS) {
+        return;
+    }
+    VkResult err = { 0 };
+
+    uint32_t deviceCount = { 0 };
+    err = vkEnumeratePhysicalDevices(context->instance, &deviceCount, NULL);
+    if (err != VK_SUCCESS) {
+        context->result = E_ENUMERATE_FAILURE;
+        return;
+    }
+    VkPhysicalDevice* devices = malloc(sizeof(*devices) * deviceCount);
+    if (!devices) {
+        context->result = E_MALLOC_FAILURE;
+        return;
+    }
+    err = vkEnumeratePhysicalDevices(context->instance, &deviceCount, devices);
+    if (err != VK_SUCCESS) {
+        context->result = E_ENUMERATE_FAILURE;
+        free(devices);
+        return;
+    }
+    VkPhysicalDeviceProperties prop = { 0 };
+    for (int i = 0; i < deviceCount; ++i) {
+        vkGetPhysicalDeviceProperties(devices[i], &prop);
+        if (prop.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+            context->physicalDevice = devices[i];
+            break;
+        }
+    }
+    if (deviceCount > 0) {
+        context->physicalDevice = devices[0];
+    }
+    else {
+        context->result = E_NO_AVAILABLE_PHYSICAL_DEVICES;
+    }
+    free(devices);
 }

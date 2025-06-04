@@ -22,4 +22,5 @@ public:
 private:
     EWindow m_window{ nullptr };
     EContext m_context{ nullptr };
+    EDisplay m_display{ nullptr };
 };

@@ -26,11 +26,15 @@ struct EContext_t {
     VkDevice device;
     VkQueue queue;
     VkDescriptorPool descriptorPool;
-    VkSurfaceKHR surface;
-    VkSwapchainKHR swapchain;
     const char** exts;
-    VkSurfaceFormatKHR surfaceFormat;
-    VkPresentModeKHR presentMode;
     uint32_t extsCount;
     uint32_t graphicsQueueFamilyIndex;
+};
+
+struct EDisplay_t {
+    EResult result;
+    VkSurfaceKHR surface;
+    VkSwapchainKHR swapchain;
+    VkSurfaceFormatKHR surfaceFormat;
+    VkPresentModeKHR presentMode;
 };

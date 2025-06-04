@@ -33,7 +33,9 @@ typedef enum EResult {
 
 E_EXTERN EResult eGetResult(void* handleIn);
 
-struct EWindowCreateInfo;
+E_OPAQUE_HANDLE(EContext);
+E_OPAQUE_HANDLE(EWindow);
+E_OPAQUE_HANDLE(EDisplay);
 
 typedef struct EWindowCreateInfo {
     const char* title;
@@ -43,6 +45,7 @@ typedef struct EWindowCreateInfo {
     } size;
 } EWindowCreateInfo;
 
-E_OPAQUE_HANDLE(EDevice);
-E_OPAQUE_HANDLE(EContext);
-E_OPAQUE_HANDLE(EWindow);
+typedef struct EDisplayCreateInfo {
+    EContext context;
+    EWindow window;
+} EDisplayCreateInfo;
