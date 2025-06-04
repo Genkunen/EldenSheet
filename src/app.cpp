@@ -1,6 +1,6 @@
 #include "app.hpp"
 
-#include "instance.h"
+#include "context.h"
 #include "window.h"
 
 #include <iostream>
@@ -11,7 +11,7 @@ App::App(AppCreateInfo& info) {
     wci.title = info.title;
     wci.size = { info.size.width, info.size.height };
     eCreateWindow(&m_window, &wci);
-    eCreateInstance(&m_context, m_window);
+    eCreateContext(&m_context, m_window);
     if (eGetResult(m_context) != E_SUCCESS) {
         std::cerr << "Error:\n"
                   << "Window: " << eGetResult(m_window) << "\n"
@@ -21,6 +21,6 @@ App::App(AppCreateInfo& info) {
 }
 
 App::~App() {
-    eDestroyInstance(m_context);
+    eDestroyContext(m_context);
     eDestroyWindow(m_window);
 }

@@ -12,19 +12,10 @@ static void GlfwErrorCallback(int error, const char* description) {
 }
 #endif
 
-// GLFW initialization
-void eCreateWindow(EWindow* windowOut, EWindowCreateInfo* infoIn) {
-    if (!windowOut) {
+static void InitWindow(EWindow window, EWindowCreateInfo* infoIn) {
+    if (window->result != E_SUCCESS) {
         return;
     }
-    EWindow window = malloc(sizeof(*window));
-    if (!window) {
-        *windowOut = NULL;
-        return;
-    }
-    *windowOut = window;
-    *window = (struct EWindow_t){ 0 };
-
     if (!infoIn) {
         window->result = E_CREATE_INFO_MISSING;
         return;
@@ -48,6 +39,22 @@ void eCreateWindow(EWindow* windowOut, EWindowCreateInfo* infoIn) {
     if (!glfwVulkanSupported()) {
         window->result = E_GLFW_FAILURE;
     }
+}
+
+// GLFW initialization
+void eCreateWindow(EWindow* windowOut, EWindowCreateInfo* infoIn) {
+    if (!windowOut) {
+        return;
+    }
+    EWindow window = malloc(sizeof(*window));
+    if (!window) {
+        *windowOut = NULL;
+        return;
+    }
+    *windowOut = window;
+    *window = (struct EWindow_t){ 0 };
+
+    InitWindow(window, infoIn);
 }
 
 // cleanup

@@ -1,4 +1,4 @@
-#include "instance.h"
+#include "context.h"
 
 #include "core.h"
 
@@ -35,7 +35,7 @@ static void SelectPresentMode(EContext context);
 static void CreateSwapchain(EContext context, EWindow window);
 
 // VkInstance initialization
-E_EXTERN void eCreateInstance(EContext contextOut[static 1], EWindow window) {
+E_EXTERN void eCreateContext(EContext contextOut[static 1], EWindow window) {
     if (!contextOut) {
         return;
     }
@@ -59,7 +59,7 @@ E_EXTERN void eCreateInstance(EContext contextOut[static 1], EWindow window) {
 }
 
 // cleanup
-E_EXTERN void eDestroyInstance(EContext context) {
+E_EXTERN void eDestroyContext(EContext context) {
     free(context->exts);
 #if E_ENABLE_ERROR_CALLBACK
     DestroyDebugUtilsMessengerEXT(
