@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core.h"
+#include "../graphics.h"
 
-E_EXTERN void eCreateInstance(EInstance* instanceOut, EWindow window);
-E_EXTERN void eDestroyInstance(EInstance instance);
+E_EXTERN void eCreateInstance(EContext* contextOut, EWindow window);
+E_EXTERN void eDestroyInstance(EContext context);

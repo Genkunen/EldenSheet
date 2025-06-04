@@ -1,5 +1,5 @@
 #pragma once
-#include "core.h"
+#include "../graphics.h"
 
 struct AppCreateInfo {
     const char* title{ nullptr };
@@ -21,5 +21,5 @@ public:
 
 private:
     EWindow m_window{ nullptr };
-    EInstance m_instance{ nullptr };
+    EContext m_context{ nullptr };
 };

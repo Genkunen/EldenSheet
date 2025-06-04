@@ -11,16 +11,16 @@ App::App(AppCreateInfo& info) {
     wci.title = info.title;
     wci.size = { info.size.width, info.size.height };
     eCreateWindow(&m_window, &wci);
-    eCreateInstance(&m_instance, m_window);
-    if (eGetResult(m_instance) != E_SUCCESS) {
+    eCreateInstance(&m_context, m_window);
+    if (eGetResult(m_context) != E_SUCCESS) {
         std::cerr << "Error:\n"
                   << "Window: " << eGetResult(m_window) << "\n"
-                  << "Instance: " << eGetResult(m_instance) << "\n";
-        throw std::runtime_error(std::to_string(eGetResult(m_instance)));
+                  << "Instance: " << eGetResult(m_context) << "\n";
+        throw std::runtime_error(std::to_string(eGetResult(m_context)));
     }
 }
 
 App::~App() {
-    eDestroyInstance(m_instance);
+    eDestroyInstance(m_context);
     eDestroyWindow(m_window);
 }

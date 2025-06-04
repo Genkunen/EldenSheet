@@ -1,49 +1,36 @@
 #pragma once
-#include "../../config.h"
-#include <stdint.h>
 
-#ifdef __cplusplus
-#define E_EXTERN extern "C"
-#else
-#define E_EXTERN
-#endif
+#define GLFW_INCLUDE_NONE
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
 
-#define E_OPAQUE_HANDLE(name) typedef struct name##_t* name
+#include "../graphics.h"
 
-typedef enum E_RESULT {
-    E_SUCCESS = 0,
-
-    E_FAILURE,
-    E_MALLOC_FAILURE,
-    E_GLFW_FAILURE,
-    E_ENUMERATE_FAILURE,
-    E_CREATE_INSTANCE_FAILURE,
-    E_CREATE_DEVICE_FAILURE,
-    E_CREATE_DESCRIPTOR_POOL_FAILURE,
-
-    E_CREATE_INFO_MISSING,
-    E_CREATE_INFO_MISSING_VALUE,
-
-    E_NO_AVAILABLE_PHYSICAL_DEVICES,
-    E_NO_AVAILABLE_GRAPHICS_QUEUES,
-    E_NO_AVAILABLE_WSI_SUPPORT,
-
-} E_RESULT;
-
-typedef E_RESULT EResult;
-
-E_EXTERN EResult eGetResult(void* handleIn);
-
-struct EWindowCreateInfo;
-
-typedef struct EWindowCreateInfo {
-    const char* title;
+struct EWindow_t {
+    EResult result;
+    GLFWwindow* window;
     struct {
         int width;
         int height;
     } size;
-} EWindowCreateInfo;
+    const char* title;
+};
 
-E_OPAQUE_HANDLE(EDevice);
-E_OPAQUE_HANDLE(EInstance);
-E_OPAQUE_HANDLE(EWindow);
+struct EContext_t {
+    EResult result;
+    VkInstance instance;
+#if E_ENABLE_ERROR_CALLBACK
+    VkDebugUtilsMessengerEXT debugMessenger;
+#endif
+    VkPhysicalDevice physicalDevice;
+    VkDevice device;
+    VkQueue queue;
+    VkDescriptorPool descriptorPool;
+    VkSurfaceKHR surface;
+    VkSwapchainKHR swapchain;
+    const char** exts;
+    VkSurfaceFormatKHR surfaceFormat;
+    VkPresentModeKHR presentMode;
+    uint32_t extsCount;
+    uint32_t graphicsQueueFamilyIndex;
+};

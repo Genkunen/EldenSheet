@@ -1,21 +1,10 @@
 #include "window.h"
+
+#include "core.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#define GLFW_INCLUDE_NONE
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
-struct EWindow_t {
-    EResult result;
-    GLFWwindow* window;
-    struct {
-        int width;
-        int height;
-    } size;
-    const char* title;
-};
 
 #if E_ENABLE_ERROR_CALLBACK
 static void GlfwErrorCallback(int error, const char* description) {

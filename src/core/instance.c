@@ -1,32 +1,11 @@
 #include "instance.h"
-#include "window.h"
+
+#include "core.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-
-#define GLFW_INCLUDE_NONE
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
-
-struct EInstance_t {
-    EResult result;
-    VkInstance instance;
-#if E_ENABLE_ERROR_CALLBACK
-    VkDebugUtilsMessengerEXT debugMessenger;
-#endif
-    VkPhysicalDevice physicalDevice;
-    VkDevice device;
-    VkQueue queue;
-    VkDescriptorPool descriptorPool;
-    VkSurfaceKHR surface;
-    const char** exts;
-    VkSurfaceFormatKHR surfaceFormat;
-    VkPresentModeKHR presentMode;
-    uint32_t extsCount;
-    uint32_t graphicsQueueFamilyIndex;
-};
 
 #if E_ENABLE_ERROR_CALLBACK
 static VKAPI_ATTR VkBool32 VKAPI_CALL DebugUtilsCallback(
@@ -45,74 +24,89 @@ static void DestroyDebugUtilsMessengerEXT(VkInstance instance,
   const VkAllocationCallbacks* pAllocator);
 #endif
 
-static void SelectPhysicalDevice(EInstance instance);
-static void SelectGraphicsQueueFamilyIndex(EInstance instance);
-static void CreateLogicalDevice(EInstance instance);
-static void CreateDescriptorPool(EInstance instance);
-static void CreateInstance(EInstance instance);
-static void CreateWindowSurface(EInstance instance, EWindow window);
-static void SelectSurfaceFormat(EInstance instance);
-static void SelectPresentMode(EInstance instance);
+static void SelectPhysicalDevice(EContext context);
+static void SelectGraphicsQueueFamilyIndex(EContext context);
+static void CreateLogicalDevice(EContext context);
+static void CreateDescriptorPool(EContext context);
+static void CreateInstance(EContext context);
+static void CreateWindowSurface(EContext context, EWindow window);
+static void SelectSurfaceFormat(EContext context);
+static void SelectPresentMode(EContext context);
+static void CreateSwapchain(EContext context, EWindow window);
 
 // VkInstance initialization
-E_EXTERN void eCreateInstance(EInstance instanceOut[static 1], EWindow window) {
-    if (!instanceOut) {
+E_EXTERN void eCreateInstance(EContext contextOut[static 1], EWindow window) {
+    if (!contextOut) {
         return;
     }
-    EInstance instance = malloc(sizeof(*instance));
-    if (!instance) {
-        *instanceOut = NULL;
+    EContext context = malloc(sizeof(*context));
+    if (!context) {
+        *contextOut = NULL;
         return;
     }
-    *instanceOut = instance;
-    *instance = (struct EInstance_t){ 0 };
+    *contextOut = context;
+    *context = (struct EContext_t){ 0 };
 
-    CreateInstance(instance);
-    SelectPhysicalDevice(instance);
-    SelectGraphicsQueueFamilyIndex(instance);
-    CreateLogicalDevice(instance);
-    CreateDescriptorPool(instance);
-    CreateWindowSurface(instance, window);
-    SelectSurfaceFormat(instance);
-    SelectPresentMode(instance);
+    CreateInstance(context);
+    SelectPhysicalDevice(context);
+    SelectGraphicsQueueFamilyIndex(context);
+    CreateLogicalDevice(context);
+    CreateDescriptorPool(context);
+    CreateWindowSurface(context, window);
+    SelectSurfaceFormat(context);
+    SelectPresentMode(context);
+    CreateSwapchain(context, window);
 }
 
 // cleanup
-E_EXTERN void eDestroyInstance(EInstance instance) {
-    free(instance->exts);
+E_EXTERN void eDestroyInstance(EContext context) {
+    free(context->exts);
 #if E_ENABLE_ERROR_CALLBACK
     DestroyDebugUtilsMessengerEXT(
-      instance->instance, instance->debugMessenger, NULL);
+      context->instance, context->debugMessenger, NULL);
 #endif
-    vkDestroySurfaceKHR(instance->instance, instance->surface, NULL);
-    vkDestroyDescriptorPool(instance->device, instance->descriptorPool, NULL);
-    vkDestroyDevice(instance->device, NULL);
-    vkDestroyInstance(instance->instance, NULL);
-    free(instance);
+    vkDestroySurfaceKHR(context->instance, context->surface, NULL);
+    vkDestroyDescriptorPool(context->device, context->descriptorPool, NULL);
+    vkDestroyDevice(context->device, NULL);
+    vkDestroyInstance(context->instance, NULL);
+    free(context);
 }
 
-static void SelectPresentMode(EInstance instance) {
-    if (instance->result != E_SUCCESS) {
+static void CreateSwapchain(EContext context, EWindow window) {
+    if (context->result != E_SUCCESS || eGetResult(window) != E_SUCCESS) {
         return;
     }
     VkResult err = { 0 };
-    // FIFO is the only REQUIRED to exist present mode by Vulkan
-    // and I think its irrelevant to use any other?
-    instance->presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    VkSwapchainKHR oldSwapchain = context->swapchain;
+    context->swapchain = VK_NULL_HANDLE;
+    err = vkDeviceWaitIdle(context->device);
+    if (err != VK_SUCCESS) {
+        context->result = E_SYNC_FAILURE;
+        return;
+    }
 }
 
-static void SelectSurfaceFormat(EInstance instance) {
-    if (instance->result != E_SUCCESS) {
+static void SelectPresentMode(EContext context) {
+    if (context->result != E_SUCCESS) {
+        return;
+    }
+    // FIFO is the only REQUIRED to exist present mode by Vulkan
+    // and I think its irrelevant to use any other?
+    context->presentMode = VK_PRESENT_MODE_FIFO_KHR;
+}
+
+static void SelectSurfaceFormat(EContext context) {
+    if (context->result != E_SUCCESS) {
         return;
     }
     VkResult err = { 0 };
     VkBool32 res = { 0 };
-    err = vkGetPhysicalDeviceSurfaceSupportKHR(instance->physicalDevice,
-      instance->graphicsQueueFamilyIndex,
-      instance->surface,
+    err = vkGetPhysicalDeviceSurfaceSupportKHR(context->physicalDevice,
+      context->graphicsQueueFamilyIndex,
+      context->surface,
       &res);
     if (err != VK_SUCCESS || res != VK_TRUE) {
-        instance->result = E_NO_AVAILABLE_WSI_SUPPORT;
+        context->result = E_NO_AVAILABLE_WSI_SUPPORT;
         return;
     }
     const VkFormat reqFmts[4] = {
@@ -125,31 +119,31 @@ static void SelectSurfaceFormat(EInstance instance) {
 
     uint32_t srfFmtCount = { 0 };
     err = vkGetPhysicalDeviceSurfaceFormatsKHR(
-      instance->physicalDevice, instance->surface, &srfFmtCount, NULL);
+      context->physicalDevice, context->surface, &srfFmtCount, NULL);
     if (err != VK_SUCCESS) {
-        instance->result = E_ENUMERATE_FAILURE;
+        context->result = E_ENUMERATE_FAILURE;
         return;
     }
     VkSurfaceFormatKHR* srfFmts = malloc(sizeof(*srfFmts) * srfFmtCount);
     if (!srfFmts) {
-        instance->result = E_MALLOC_FAILURE;
+        context->result = E_MALLOC_FAILURE;
         return;
     }
     err = vkGetPhysicalDeviceSurfaceFormatsKHR(
-      instance->physicalDevice, instance->surface, &srfFmtCount, srfFmts);
+      context->physicalDevice, context->surface, &srfFmtCount, srfFmts);
     if (err != VK_SUCCESS) {
-        instance->result = E_ENUMERATE_FAILURE;
+        context->result = E_ENUMERATE_FAILURE;
         goto return_early;
     }
 
     if (srfFmtCount == 1) {
         if (srfFmts[0].format == VK_FORMAT_UNDEFINED) {
-            instance->surfaceFormat.format = VK_FORMAT_B8G8R8A8_UNORM;
-            instance->surfaceFormat.colorSpace =
+            context->surfaceFormat.format = VK_FORMAT_B8G8R8A8_UNORM;
+            context->surfaceFormat.colorSpace =
               VK_COLORSPACE_SRGB_NONLINEAR_KHR;
             goto return_early;
         }
-        instance->surfaceFormat = srfFmts[0];
+        context->surfaceFormat = srfFmts[0];
         goto return_early;
     }
 
@@ -161,48 +155,48 @@ static void SelectSurfaceFormat(EInstance instance) {
     for (fmt = srfFmts; fmt != srfFmts + srfFmtCount; ++fmt) {
         for (reqFmt = reqFmts; reqFmt != reqFmts + reqFmtSize; reqFmt++) {
             if (fmt->format == *reqFmt && fmt->colorSpace == reqColorSpace) {
-                instance->surfaceFormat = *fmt;
+                context->surfaceFormat = *fmt;
                 goto return_early;
             }
         }
     }
     // if none found use whatever first available
-    instance->surfaceFormat = *srfFmts;
+    context->surfaceFormat = *srfFmts;
 return_early:
     free(srfFmts);
 }
 
-static void CreateWindowSurface(EInstance instance, EWindow window) {
-    if (instance->result != E_SUCCESS) {
+static void CreateWindowSurface(EContext context, struct EWindow_t* window) {
+    if (context->result != E_SUCCESS || eGetResult(window) != E_SUCCESS) {
         return;
     }
     VkResult err = glfwCreateWindowSurface(
-      instance->instance, eGetGlfwWindow(window), NULL, &instance->surface);
+      context->instance, window->window, NULL, &context->surface);
     if (err != VK_SUCCESS) {
-        instance->result = E_GLFW_FAILURE;
+        context->result = E_GLFW_FAILURE;
     }
 }
 
-static void SelectPhysicalDevice(EInstance instance) {
-    if (instance->result != E_SUCCESS) {
+static void SelectPhysicalDevice(EContext context) {
+    if (context->result != E_SUCCESS) {
         return;
     }
     VkResult err = { 0 };
 
     uint32_t deviceCount = { 0 };
-    err = vkEnumeratePhysicalDevices(instance->instance, &deviceCount, NULL);
+    err = vkEnumeratePhysicalDevices(context->instance, &deviceCount, NULL);
     if (err != VK_SUCCESS) {
-        instance->result = E_ENUMERATE_FAILURE;
+        context->result = E_ENUMERATE_FAILURE;
         return;
     }
     VkPhysicalDevice* devices = malloc(sizeof(*devices) * deviceCount);
     if (!devices) {
-        instance->result = E_MALLOC_FAILURE;
+        context->result = E_MALLOC_FAILURE;
         return;
     }
-    err = vkEnumeratePhysicalDevices(instance->instance, &deviceCount, devices);
+    err = vkEnumeratePhysicalDevices(context->instance, &deviceCount, devices);
     if (err != VK_SUCCESS) {
-        instance->result = E_ENUMERATE_FAILURE;
+        context->result = E_ENUMERATE_FAILURE;
         free(devices);
         return;
     }
@@ -210,44 +204,44 @@ static void SelectPhysicalDevice(EInstance instance) {
     for (int i = 0; i < deviceCount; ++i) {
         vkGetPhysicalDeviceProperties(devices[i], &prop);
         if (prop.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
-            instance->physicalDevice = devices[i];
+            context->physicalDevice = devices[i];
             break;
         }
     }
     if (deviceCount > 0) {
-        instance->physicalDevice = devices[0];
+        context->physicalDevice = devices[0];
     }
     else {
-        instance->result = E_NO_AVAILABLE_PHYSICAL_DEVICES;
+        context->result = E_NO_AVAILABLE_PHYSICAL_DEVICES;
     }
     free(devices);
 }
 
-static void SelectGraphicsQueueFamilyIndex(EInstance instance) {
-    if (instance->result != E_SUCCESS) {
+static void SelectGraphicsQueueFamilyIndex(EContext context) {
+    if (context->result != E_SUCCESS) {
         return;
     }
     uint32_t count = { 0 };
     vkGetPhysicalDeviceQueueFamilyProperties(
-      instance->physicalDevice, &count, NULL);
+      context->physicalDevice, &count, NULL);
     VkQueueFamilyProperties* props = malloc(sizeof(*props) * count);
     if (!props) {
-        instance->result = E_MALLOC_FAILURE;
+        context->result = E_MALLOC_FAILURE;
         return;
     }
     vkGetPhysicalDeviceQueueFamilyProperties(
-      instance->physicalDevice, &count, props);
+      context->physicalDevice, &count, props);
     for (int i = 0; i < count; ++i) {
         if (props->queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            instance->graphicsQueueFamilyIndex = i;
+            context->graphicsQueueFamilyIndex = i;
             return;
         }
     }
-    instance->result = E_NO_AVAILABLE_GRAPHICS_QUEUES;
+    context->result = E_NO_AVAILABLE_GRAPHICS_QUEUES;
 }
 
-static void CreateLogicalDevice(EInstance instance) {
-    if (instance->result != E_SUCCESS) {
+static void CreateLogicalDevice(EContext context) {
+    if (context->result != E_SUCCESS) {
         return;
     }
 
@@ -260,7 +254,7 @@ static void CreateLogicalDevice(EInstance instance) {
       .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
       .pQueuePriorities = queuePriorities,
       .queueCount = 1,
-      .queueFamilyIndex = instance->graphicsQueueFamilyIndex,
+      .queueFamilyIndex = context->graphicsQueueFamilyIndex,
     } };
 
     VkDeviceCreateInfo dci = (VkDeviceCreateInfo){
@@ -271,21 +265,18 @@ static void CreateLogicalDevice(EInstance instance) {
         .pQueueCreateInfos = dqcis,
     };
 
-    err =
-      vkCreateDevice(instance->physicalDevice, &dci, NULL, &instance->device);
+    err = vkCreateDevice(context->physicalDevice, &dci, NULL, &context->device);
     if (err != VK_SUCCESS) {
-        instance->result = E_CREATE_DEVICE_FAILURE;
+        context->result = E_CREATE_DEVICE_FAILURE;
         return;
     }
 
-    vkGetDeviceQueue(instance->device,
-      instance->graphicsQueueFamilyIndex,
-      0,
-      &instance->queue);
+    vkGetDeviceQueue(
+      context->device, context->graphicsQueueFamilyIndex, 0, &context->queue);
 }
 
-static void CreateDescriptorPool(EInstance instance) {
-    if (instance->result != E_SUCCESS) {
+static void CreateDescriptorPool(EContext context) {
+    if (context->result != E_SUCCESS) {
         return;
     }
     VkResult err = { 0 };
@@ -304,9 +295,9 @@ static void CreateDescriptorPool(EInstance instance) {
         .maxSets = maxSets,
     };
     err = vkCreateDescriptorPool(
-      instance->device, &dpci, NULL, &instance->descriptorPool);
+      context->device, &dpci, NULL, &context->descriptorPool);
     if (err != VK_SUCCESS) {
-        instance->result = E_CREATE_DESCRIPTOR_POOL_FAILURE;
+        context->result = E_CREATE_DESCRIPTOR_POOL_FAILURE;
     }
 }
 
@@ -353,8 +344,8 @@ static void DestroyDebugUtilsMessengerEXT(VkInstance instance,
 }
 #endif
 
-static void CreateInstance(EInstance instance) {
-    if (instance->result != E_SUCCESS) {
+static void CreateInstance(EContext context) {
+    if (context->result != E_SUCCESS) {
         return;
     }
     VkResult err = { 0 };
@@ -363,7 +354,7 @@ static void CreateInstance(EInstance instance) {
     uint32_t reqExtCount = { 0 };
     reqExt = glfwGetRequiredInstanceExtensions(&reqExtCount);
     if (!reqExt) {
-        instance->result = E_GLFW_FAILURE;
+        context->result = E_GLFW_FAILURE;
         return;
     }
 
@@ -407,23 +398,23 @@ static void CreateInstance(EInstance instance) {
     uint32_t propCount = { 0 };
     err = vkEnumerateInstanceExtensionProperties(NULL, &propCount, NULL);
     if (err != VK_SUCCESS) {
-        instance->result = E_ENUMERATE_FAILURE;
+        context->result = E_ENUMERATE_FAILURE;
         return;
     }
 
     props = malloc(sizeof(*props) * propCount);
     // Worst case scenario malloc. Small sizes so doesn't really matter.
-    instance->exts =
-      malloc(sizeof(*instance->exts) * (propCount + addReqExtCount));
-    if (!props || !instance->exts) {
+    context->exts =
+      malloc(sizeof(*context->exts) * (propCount + addReqExtCount));
+    if (!props || !context->exts) {
         free(props);
-        instance->result = E_MALLOC_FAILURE;
+        context->result = E_MALLOC_FAILURE;
         return;
     }
 
     err = vkEnumerateInstanceExtensionProperties(NULL, &propCount, props);
     if (err != VK_SUCCESS) {
-        instance->result = E_ENUMERATE_FAILURE;
+        context->result = E_ENUMERATE_FAILURE;
         free(props);
         return;
     }
@@ -448,23 +439,23 @@ static void CreateInstance(EInstance instance) {
         // searching through all of glfw's required extensions
         for (int j = 0; j < reqExtCount; ++j) {
             if (strcmp(props[i].extensionName, reqExt[j]) == 0) {
-                instance->exts[addNext++] = props[i].extensionName;
+                context->exts[addNext++] = props[i].extensionName;
             }
         }
         // searching through all of additional required extensions
         for (int j = 0; j < addReqExtCount; ++j) {
             if (strcmp(props[i].extensionName, addReqExt[j]) == 0) {
-                instance->exts[addNext++] = props[i].extensionName;
+                context->exts[addNext++] = props[i].extensionName;
             }
         }
     }
-    instance->extsCount = addNext;
+    context->extsCount = addNext;
 
-    ici.enabledExtensionCount = instance->extsCount;
-    ici.ppEnabledExtensionNames = instance->exts;
-    err = vkCreateInstance(&ici, NULL, &instance->instance);
+    ici.enabledExtensionCount = context->extsCount;
+    ici.ppEnabledExtensionNames = context->exts;
+    err = vkCreateInstance(&ici, NULL, &context->instance);
     if (err != VK_SUCCESS) {
-        instance->result = E_CREATE_INSTANCE_FAILURE;
+        context->result = E_CREATE_INSTANCE_FAILURE;
         free(props);
         return;
     }
@@ -472,9 +463,9 @@ static void CreateInstance(EInstance instance) {
 
 #if E_ENABLE_ERROR_CALLBACK
     err = CreateDebugUtilsMessengerEXT(
-      instance->instance, &duimci, NULL, &instance->debugMessenger);
+      context->instance, &duimci, NULL, &context->debugMessenger);
     if (err != VK_SUCCESS) {
-        instance->result = E_FAILURE;
+        context->result = E_FAILURE;
     }
 #endif
 }

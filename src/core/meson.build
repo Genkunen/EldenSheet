@@ -1,7 +1,7 @@
 incs += include_directories('.')
 
 c_srcs = files(
-    'core.c',
+    'graphics.c',
     'instance.c',
     'window.c',
 )
