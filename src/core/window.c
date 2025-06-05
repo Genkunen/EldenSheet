@@ -42,7 +42,7 @@ static void InitWindow(EWindow window, EWindowCreateInfo* infoIn) {
 }
 
 // GLFW initialization
-void eCreateWindow(EWindow* windowOut, EWindowCreateInfo* infoIn) {
+E_EXTERN void eCreateWindow(EWindow* windowOut, EWindowCreateInfo* infoIn) {
     if (!windowOut) {
         return;
     }
@@ -58,8 +58,12 @@ void eCreateWindow(EWindow* windowOut, EWindowCreateInfo* infoIn) {
 }
 
 // cleanup
-void eDestroyWindow(EWindow window) {
+E_EXTERN void eDestroyWindow(EWindow window) {
     glfwDestroyWindow(window->window);
     free(window);
     glfwTerminate();
+}
+
+E_EXTERN int eWindowShouldClose(EWindow window) {
+    return glfwWindowShouldClose(window->window);
 }

@@ -29,6 +29,10 @@ App::App(AppCreateInfo& info) {
     dci.window = m_window;
     eCreateDisplay(&m_display, &dci);
     Check(m_display);
+
+    while (!static_cast<bool>(eWindowShouldClose(m_window))) {
+        break;
+    }
 }
 
 App::~App() {

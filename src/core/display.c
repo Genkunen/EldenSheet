@@ -15,6 +15,7 @@ static void CreateSwapchain(EDisplay display, EContext context);
 static void CreateRenderPass(EDisplay display, EContext context);
 static void CreateImageViews(EDisplay display, EContext context);
 static void CreateFrameBuffer(EDisplay display, EContext context);
+static void CreateCommandBuffer(EDisplay display, EContext context);
 
 E_EXTERN void eCreateDisplay(EDisplay* displayOut, EDisplayCreateInfo* infoIn) {
     if (!displayOut) {
@@ -47,19 +48,100 @@ E_EXTERN void eCreateDisplay(EDisplay* displayOut, EDisplayCreateInfo* infoIn) {
     CreateRenderPass(display, infoIn->context);
     CreateImageViews(display, infoIn->context);
     CreateFrameBuffer(display, infoIn->context);
+    CreateCommandBuffer(display, infoIn->context);
 }
 
 E_EXTERN void eDestroyDisplay(EDisplay display, EContext context) {
-    struct EFrame* curr = { NULL };
+    struct EFrame* curF = { NULL };
     while (display->frameCount--) {
-        curr = &display->frames[display->frameCount];
-        vkDestroyFramebuffer(context->device, curr->frameBuffer, NULL);
-        vkDestroyImageView(context->device, curr->imageView, NULL);
+        curF = &display->frames[display->frameCount];
+        vkDestroyFramebuffer(context->device, curF->frameBuffer, NULL);
+        vkDestroyImageView(context->device, curF->imageView, NULL);
+        vkDestroyFence(context->device, curF->fence, NULL);
+        vkDestroyCommandPool(context->device, curF->commandPool, NULL);
     }
+    struct EFrameSemaphores* curS = { NULL };
+    while (display->semaphoreCount--) {
+        curS = &display->semaphores[display->semaphoreCount];
+        vkDestroySemaphore(context->device, curS->imageAvailable, NULL);
+        vkDestroySemaphore(context->device, curS->renderFinished, NULL);
+    }
+
     vkDestroyRenderPass(context->device, display->renderPass, NULL);
     vkDestroySwapchainKHR(context->device, display->swapchain, NULL);
     vkDestroySurfaceKHR(context->instance, display->surface, NULL);
     free(display);
+}
+
+static void CreateCommandBuffer(EDisplay display, EContext context) {
+    if (display->result != E_SUCCESS) {
+        return;
+    }
+    VkResult err = { 0 };
+
+    uint32_t count = { display->frameCount };
+    struct EFrame* curF = { NULL };
+    while (count--) {
+        curF = &display->frames[count];
+
+        VkCommandPoolCreateInfo cpci = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            .queueFamilyIndex = context->graphicsQueueFamilyIndex,
+        };
+        err =
+          vkCreateCommandPool(context->device, &cpci, NULL, &curF->commandPool);
+        if (err != VK_SUCCESS) {
+            display->result = E_CREATE_COMMAND_POOL_FAILURE;
+            return;
+        }
+
+        VkCommandBufferAllocateInfo cbai = {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandBufferCount = 1,
+            .commandPool = curF->commandPool,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        };
+        err = vkAllocateCommandBuffers(
+          context->device, &cbai, &curF->commandBuffer);
+        if (err != VK_SUCCESS) {
+            display->result = E_CREATE_COMMAND_BUFFER_FAILURE;
+            return;
+        }
+
+        VkFenceCreateInfo fci = {
+            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+        };
+        err = vkCreateFence(context->device, &fci, NULL, &curF->fence);
+        if (err != VK_SUCCESS) {
+            display->result = E_CREATE_FENCE_FAILURE;
+            return;
+        }
+    }
+
+    count = display->semaphoreCount;
+    struct EFrameSemaphores* curS = { NULL };
+    while (count--) {
+        curS = &display->semaphores[count];
+
+        VkSemaphoreCreateInfo sci = {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        };
+
+        err =
+          vkCreateSemaphore(context->device, &sci, NULL, &curS->imageAvailable);
+        if (err != VK_SUCCESS) {
+            display->result = E_CREATE_SEMAPHORE_FAILURE;
+            return;
+        }
+
+        err =
+          vkCreateSemaphore(context->device, &sci, NULL, &curS->renderFinished);
+        if (err != VK_SUCCESS) {
+            display->result = E_CREATE_SEMAPHORE_FAILURE;
+            return;
+        }
+    }
 }
 
 static void CreateFrameBuffer(EDisplay display, EContext context) {
