@@ -12,6 +12,8 @@ static void SelectSurfaceFormat(EDisplay display, EContext context);
 static void SelectPresentMode(EDisplay display);
 static void CreateSwapchain(EDisplay display, EContext context);
 static void CreateRenderPass(EDisplay display, EContext context);
+static void CreateImageViews(EDisplay display, EContext context);
+static void CleanFrames(EDisplay display, EContext context);
 
 E_EXTERN void eCreateDisplay(EDisplay* displayOut, EDisplayCreateInfo* infoIn) {
     if (!displayOut) {
@@ -42,14 +44,60 @@ E_EXTERN void eCreateDisplay(EDisplay* displayOut, EDisplayCreateInfo* infoIn) {
     SelectPresentMode(display);
     CreateSwapchain(display, infoIn->context);
     CreateRenderPass(display, infoIn->context);
+    CreateImageViews(display, infoIn->context);
 }
 
 E_EXTERN void eDestroyDisplay(EDisplay display, EContext context) {
+    while (display->frameCount--) {
+        vkDestroyImageView(context->device,
+          display->frames[display->frameCount].imageView,
+          NULL);
+    }
     vkDestroyRenderPass(context->device, display->renderPass, NULL);
     vkDestroySwapchainKHR(context->device, display->swapchain, NULL);
     vkDestroySurfaceKHR(context->instance, display->surface, NULL);
     free(display);
 }
+
+static void CreateImageViews(EDisplay display, EContext context) {
+    if (display->result != E_SUCCESS) {
+        return;
+    }
+    VkResult err = { 0 };
+
+    VkImageSubresourceRange imgRange = {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+    };
+    VkImageViewCreateInfo ivci = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .format = display->surfaceFormat.format,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .components = { 
+          .a = VK_COMPONENT_SWIZZLE_A, 
+          .r = VK_COMPONENT_SWIZZLE_R,
+          .g = VK_COMPONENT_SWIZZLE_G,
+          .b = VK_COMPONENT_SWIZZLE_B, 
+        },
+        .subresourceRange = imgRange,
+    };
+
+    uint32_t count = { display->frameCount };
+    struct EFrame* curr = { NULL };
+    while (count--) {
+        curr = &display->frames[count];
+        ivci.image = curr->image;
+        err = vkCreateImageView(context->device, &ivci, NULL, &curr->imageView);
+        if (err != VK_SUCCESS) {
+            display->result = E_CREATE_IMAGE_VIEW_FAILURE;
+            return;
+        }
+    }
+}
+
 
 static void CreateRenderPass(EDisplay display, EContext context) {
     if (display->result != E_SUCCESS) {
