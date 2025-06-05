@@ -2,12 +2,16 @@
 
 #include "core.h"
 
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
 
 static void CreateSurface(EDisplay display, EWindow window, EContext context);
 static void SelectSurfaceFormat(EDisplay display, EContext context);
 static void SelectPresentMode(EDisplay display);
 static void CreateSwapchain(EDisplay display, EContext context);
+static void CreateRenderPass(EDisplay display, EContext context);
 
 E_EXTERN void eCreateDisplay(EDisplay* displayOut, EDisplayCreateInfo* infoIn) {
     if (!displayOut) {
@@ -30,18 +34,114 @@ E_EXTERN void eCreateDisplay(EDisplay* displayOut, EDisplayCreateInfo* infoIn) {
         return;
     }
 
+    glfwGetFramebufferSize(
+      infoIn->window->window, &display->width, &display->height);
+
     CreateSurface(display, infoIn->window, infoIn->context);
     SelectSurfaceFormat(display, infoIn->context);
     SelectPresentMode(display);
     CreateSwapchain(display, infoIn->context);
-
-    display->result = 1;
+    CreateRenderPass(display, infoIn->context);
 }
 
 E_EXTERN void eDestroyDisplay(EDisplay display, EContext context) {
+    vkDestroyRenderPass(context->device, display->renderPass, NULL);
+    vkDestroySwapchainKHR(context->device, display->swapchain, NULL);
     vkDestroySurfaceKHR(context->instance, display->surface, NULL);
     free(display);
-    //
+}
+
+static void CreateRenderPass(EDisplay display, EContext context) {
+    if (display->result != E_SUCCESS) {
+        return;
+    }
+    VkResult err = { 0 };
+
+    VkAttachmentDescription attDesc = {
+        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .format = display->surfaceFormat.format,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+    };
+    VkAttachmentReference attRef = {
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .attachment = 0,
+    };
+    VkSubpassDescription subpass = {
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .pColorAttachments = &attRef,
+        .colorAttachmentCount = 1,
+    };
+    VkSubpassDependency dep = {
+        .dstSubpass = 0,
+        .srcSubpass = VK_SUBPASS_EXTERNAL,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .srcAccessMask = 0,
+        .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+    };
+    VkRenderPassCreateInfo rpci = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+        .pSubpasses = &subpass,
+        .subpassCount = 1,
+        .pAttachments = &attDesc,
+        .attachmentCount = 1,
+        .pDependencies = &dep,
+        .dependencyCount = 1,
+    };
+    err =
+      vkCreateRenderPass(context->device, &rpci, NULL, &display->renderPass);
+    if (err != VK_SUCCESS) {
+        display->result = E_CREATE_RENDER_PASS_FAILURE;
+    }
+}
+
+static void DestroyFrames(EDisplay display, EContext context) {
+    uint32_t count = display->frameCount;
+    struct EFrame* curr = { 0 };
+    while (count--) {
+        curr = &display->frames[count];
+
+        vkDestroyFence(context->device, curr->fence, NULL);
+        curr->fence = VK_NULL_HANDLE;
+
+        vkFreeCommandBuffers(
+          context->device, curr->commandPool, 1, &curr->commandBuffer);
+        curr->commandBuffer = VK_NULL_HANDLE;
+
+        vkDestroyCommandPool(context->device, curr->commandPool, NULL);
+        curr->commandPool = VK_NULL_HANDLE;
+
+        vkDestroyImageView(context->device, curr->imageView, NULL);
+        vkDestroyFramebuffer(context->device, curr->frameBuffer, NULL);
+    }
+}
+
+static void DestroySemaphores(EDisplay display, EContext context) {
+    uint32_t count = { display->semaphoreCount };
+    struct EFrameSemaphores* curr = { NULL };
+    while (count--) {
+        curr = &display->semaphores[count];
+        vkDestroySemaphore(context->device, curr->imageAvailable, NULL);
+        curr->imageAvailable = NULL;
+        vkDestroySemaphore(context->device, curr->renderFinished, NULL);
+        curr->renderFinished = NULL;
+    }
+}
+
+static void CleanFrames(EDisplay display, EContext context) {
+    DestroyFrames(display, context);
+    DestroySemaphores(display, context);
+    free(display->frames);
+    free(display->semaphores);
+    display->frameCount = 0;
+    if (display->renderPass) {
+        vkDestroyRenderPass(context->device, display->renderPass, NULL);
+    }
 }
 
 static void CreateSwapchain(EDisplay display, EContext context) {
@@ -49,12 +149,88 @@ static void CreateSwapchain(EDisplay display, EContext context) {
         return;
     }
     VkResult err = { 0 };
-    VkSwapchainKHR oldSwapchain = display->swapchain;
+
+    VkSwapchainKHR oldSwapchain = { display->swapchain };
     display->swapchain = VK_NULL_HANDLE;
     err = vkDeviceWaitIdle(context->device);
     if (err != VK_SUCCESS) {
         context->result = E_SYNC_FAILURE;
         return;
+    }
+
+    CleanFrames(display, context);
+
+    VkSurfaceCapabilitiesKHR cap = { 0 };
+    err = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+      context->physicalDevice, display->surface, &cap);
+    if (err != VK_SUCCESS) {
+        display->result = E_CREATE_SWAPCHAIN_FAILURE;
+        return;
+    }
+
+
+    uint32_t minImageCount = min(
+      cap.maxImageCount ? cap.maxImageCount : 999, max(2, cap.minImageCount));
+    VkSurfaceTransformFlagBitsKHR preTransform =
+      (cap.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+        ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
+        : cap.currentTransform;
+
+    VkSwapchainCreateInfoKHR sci = {
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .oldSwapchain = oldSwapchain,
+        .clipped = VK_TRUE,
+        .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+        .imageArrayLayers = 1,
+        .imageColorSpace = display->surfaceFormat.colorSpace,
+        .imageFormat = display->surfaceFormat.format,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .minImageCount = minImageCount,  // 2 for FIFO
+        .preTransform = preTransform,
+        .presentMode = display->presentMode,
+        .surface = display->surface,
+        .imageExtent = { .width = display->width, .height = display->height },
+    };
+    err =
+      vkCreateSwapchainKHR(context->device, &sci, NULL, &display->swapchain);
+    if (err != VK_SUCCESS) {
+        display->result = E_CREATE_SWAPCHAIN_FAILURE;
+        return;
+    }
+    err = vkGetSwapchainImagesKHR(
+      context->device, display->swapchain, &display->frameCount, NULL);
+    if (err != VK_SUCCESS) {
+        display->result = E_CREATE_SWAPCHAIN_FAILURE;
+        return;
+    }
+
+    VkImage images[8] = { 0 };
+    if (display->frameCount > 8) {
+        display->result = E_CREATE_SWAPCHAIN_FAILURE;
+        return;
+    }
+    err = vkGetSwapchainImagesKHR(
+      context->device, display->swapchain, &display->frameCount, images);
+    if (err != VK_SUCCESS) {
+        display->result = E_CREATE_SWAPCHAIN_FAILURE;
+        return;
+    }
+    display->semaphoreCount = display->frameCount + 1;
+    display->frames = calloc(display->frameCount, sizeof(*display->frames));
+    display->semaphores =
+      calloc(display->semaphoreCount, sizeof(*display->semaphores));
+    if (!display->frames || !display->semaphores) {
+        display->result = E_CREATE_SWAPCHAIN_FAILURE;
+        free(display->frames);
+        free(display->semaphores);
+        return;
+    }
+    for (uint32_t i = 0; i < display->frameCount; ++i) {
+        display->frames[i].image = images[i];
+    }
+    if (oldSwapchain) {
+        vkDestroySwapchainKHR(context->device, display->swapchain, NULL);
     }
 }
 
@@ -99,7 +275,7 @@ static void SelectSurfaceFormat(EDisplay display, EContext context) {
         context->result = E_ENUMERATE_FAILURE;
         return;
     }
-    VkSurfaceFormatKHR* srfFmts = malloc(sizeof(*srfFmts) * srfFmtCount);
+    VkSurfaceFormatKHR* srfFmts = calloc(srfFmtCount, sizeof(*srfFmts));
     if (!srfFmts) {
         context->result = E_MALLOC_FAILURE;
         return;
@@ -124,7 +300,7 @@ static void SelectSurfaceFormat(EDisplay display, EContext context) {
 
     VkSurfaceFormatKHR* fmt = { NULL };
     const VkFormat* reqFmt = { NULL };
-    uint32_t reqFmtSize = sizeof(reqFmts) / sizeof(*reqFmts);
+    uint32_t reqFmtSize = { sizeof(reqFmts) / sizeof(*reqFmts) };
 
     // search if requested format is found
     for (fmt = srfFmts; fmt != srfFmts + srfFmtCount; ++fmt) {

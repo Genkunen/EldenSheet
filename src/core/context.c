@@ -49,10 +49,6 @@ E_EXTERN void eCreateContext(EContext* contextOut) {
     SelectGraphicsQueueFamilyIndex(context);
     CreateLogicalDevice(context);
     CreateDescriptorPool(context);
-    // CreateWindowSurface(context, window);
-    // SelectSurfaceFormat(context);
-    // SelectPresentMode(context);
-    // CreateSwapchain(context, window);
 }
 
 // cleanup

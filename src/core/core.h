@@ -31,10 +31,31 @@ struct EContext_t {
     uint32_t graphicsQueueFamilyIndex;
 };
 
+struct EFrame {
+    VkCommandPool commandPool;
+    VkCommandBuffer commandBuffer;
+    VkFence fence;
+    VkFramebuffer frameBuffer;
+    VkImage image;
+    VkImageView imageView;
+};
+
+struct EFrameSemaphores {
+    VkSemaphore imageAvailable;
+    VkSemaphore renderFinished;
+};
+
 struct EDisplay_t {
     EResult result;
+    struct EFrame* frames;
+    struct EFrameSemaphores* semaphores;
     VkSurfaceKHR surface;
     VkSwapchainKHR swapchain;
     VkSurfaceFormatKHR surfaceFormat;
     VkPresentModeKHR presentMode;
+    VkRenderPass renderPass;
+    uint32_t frameCount;
+    uint32_t semaphoreCount;
+    int width;  // glfw forces int
+    int height;
 };

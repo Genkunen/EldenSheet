@@ -63,7 +63,3 @@ void eDestroyWindow(EWindow window) {
     free(window);
     glfwTerminate();
 }
-
-void* eGetGlfwWindow(EWindow window) {
-    return window->window;
-}
