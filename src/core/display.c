@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 static void CleanFrames(EDisplay display, EContext context);
 static void CreateSurface(EDisplay display, EWindow window, EContext context);
 static void SelectSurfaceFormat(EDisplay display, EContext context);
@@ -17,8 +16,9 @@ static void CreateImageViews(EDisplay display, EContext context);
 static void CreateFrameBuffer(EDisplay display, EContext context);
 static void CreateCommandBuffer(EDisplay display, EContext context);
 
-E_EXTERN void eCreateDisplay(EDisplay* displayOut, EDisplayCreateInfo* infoIn) {
-    if (!displayOut) {
+E_EXTERN void
+  eCreateDisplay(EDisplay* displayOut, EContext context, EWindow window) {
+    if (!displayOut || !context || !window) {
         return;
     }
     EDisplay display = malloc(sizeof(*display));
@@ -29,26 +29,16 @@ E_EXTERN void eCreateDisplay(EDisplay* displayOut, EDisplayCreateInfo* infoIn) {
     *displayOut = display;
     *display = (struct EDisplay_t){ 0 };
 
-    if (!infoIn) {
-        display->result = E_CREATE_INFO_MISSING;
-        return;
-    }
-    if (!infoIn->context || !infoIn->window) {
-        display->result = E_CREATE_INFO_MISSING_VALUE;
-        return;
-    }
+    glfwGetFramebufferSize(window->window, &display->width, &display->height);
 
-    glfwGetFramebufferSize(
-      infoIn->window->window, &display->width, &display->height);
-
-    CreateSurface(display, infoIn->window, infoIn->context);
-    SelectSurfaceFormat(display, infoIn->context);
+    CreateSurface(display, window, context);
+    SelectSurfaceFormat(display, context);
     SelectPresentMode(display);
-    CreateSwapchain(display, infoIn->context);
-    CreateRenderPass(display, infoIn->context);
-    CreateImageViews(display, infoIn->context);
-    CreateFrameBuffer(display, infoIn->context);
-    CreateCommandBuffer(display, infoIn->context);
+    CreateSwapchain(display, context);
+    CreateRenderPass(display, context);
+    CreateImageViews(display, context);
+    CreateFrameBuffer(display, context);
+    CreateCommandBuffer(display, context);
 }
 
 E_EXTERN void eDestroyDisplay(EDisplay display, EContext context) {
@@ -71,6 +61,123 @@ E_EXTERN void eDestroyDisplay(EDisplay display, EContext context) {
     vkDestroySwapchainKHR(context->device, display->swapchain, NULL);
     vkDestroySurfaceKHR(context->instance, display->surface, NULL);
     free(display);
+}
+
+E_EXTERN void eDisplayFrame(EDisplay display, EContext context) {
+    if (display->result != E_SUCCESS) {
+        return;
+    }
+    VkResult err = { 0 };
+
+    VkSemaphore renderFinished =
+      display->semaphores[display->semaphoreCurrentIndex].renderFinished;
+
+    VkPresentInfoKHR pi = {
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .pImageIndices = &display->frameCurrentIndex,
+        .pSwapchains = &display->swapchain,
+        .swapchainCount = 1,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &renderFinished,
+    };
+    err = vkQueuePresentKHR(context->queue, &pi);
+    if (err != VK_SUCCESS) {
+        display->result = E_FRAME_DISPLAY_ERROR;
+        return;
+    }
+    display->semaphoreCurrentIndex =
+      (display->semaphoreCurrentIndex + 1) % display->semaphoreCount;
+}
+
+E_EXTERN void eRenderFrame(EDisplay display, EContext context, EWindow window) {
+    if (display->result != E_SUCCESS) {
+        return;
+    }
+    VkResult err = { 0 };
+
+    struct EFrameSemaphores* curS =
+      &display->semaphores[display->semaphoreCurrentIndex];
+
+    VkSemaphore imgAvailable = curS->imageAvailable;
+    VkSemaphore renderFinished = curS->renderFinished;
+
+    err = vkAcquireNextImageKHR(context->device,
+      display->swapchain,
+      UINT32_MAX,
+      imgAvailable,
+      VK_NULL_HANDLE,
+      &display->frameCurrentIndex);
+
+    if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR) {
+        window->shouldResize = 1;
+        if (err == VK_ERROR_OUT_OF_DATE_KHR) {
+            return;
+        }
+    }
+    else if (err != VK_SUCCESS) {
+        display->result = E_FRAME_RENDER_ERROR;
+        return;
+    }
+
+    struct EFrame* curF = &display->frames[display->frameCurrentIndex];
+
+    err = vkWaitForFences(context->device, 1, &curF->fence, 1, UINT32_MAX);
+    if (err != VK_SUCCESS) {
+        display->result = E_FRAME_RENDER_ERROR;
+    }
+    err = vkResetFences(context->device, 1, &curF->fence);
+    if (err != VK_SUCCESS) {
+        display->result = E_FRAME_RENDER_ERROR;
+    }
+
+    err = vkResetCommandPool(context->device, curF->commandPool, 0);
+    if (err != VK_SUCCESS) {
+        display->result = E_FRAME_RENDER_ERROR;
+    }
+    VkCommandBufferBeginInfo cbbi = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    err = vkBeginCommandBuffer(curF->commandBuffer, &cbbi);
+    if (err != VK_SUCCESS) {
+        display->result = E_FRAME_RENDER_ERROR;
+    }
+
+    VkRenderPassBeginInfo rpbi = {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = display->renderPass,
+        .renderArea.extent = { 
+            .width = display->width,
+            .height = display->height, 
+        },
+        .clearValueCount = 1,
+        .pClearValues = &display->clearValue,
+        .framebuffer = curF->frameBuffer,
+    };
+    vkCmdBeginRenderPass(
+      curF->commandBuffer, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
+
+    vkCmdEndRenderPass(curF->commandBuffer);
+    VkPipelineStageFlags psf = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo si = {
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &curF->commandBuffer,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &renderFinished,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &imgAvailable,
+        .pWaitDstStageMask = &psf,
+    };
+    err = vkEndCommandBuffer(curF->commandBuffer);
+    if (err != VK_SUCCESS) {
+        display->result = E_FRAME_RENDER_ERROR;
+    }
+
+    err = vkQueueSubmit(context->queue, 1, &si, curF->fence);
+    if (err != VK_SUCCESS) {
+        display->result = E_FRAME_RENDER_ERROR;
+    }
 }
 
 static void CreateCommandBuffer(EDisplay display, EContext context) {

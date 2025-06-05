@@ -24,6 +24,13 @@ static void InitWindow(EWindow window, EWindowCreateInfo* infoIn) {
         window->result = E_CREATE_INFO_MISSING_VALUE;
         return;
     }
+    *window = (struct EWindow_t){
+        .title = infoIn->title,
+        .size = {
+          .width = infoIn->size.width,
+          .height = infoIn->size.height,
+        },
+    };
 
 #if E_ENABLE_ERROR_CALLBACK
     (void)glfwSetErrorCallback(GlfwErrorCallback);
@@ -66,4 +73,22 @@ E_EXTERN void eDestroyWindow(EWindow window) {
 
 E_EXTERN int eWindowShouldClose(EWindow window) {
     return glfwWindowShouldClose(window->window);
+}
+
+E_EXTERN void ePollEvents(void) {
+    glfwPollEvents();
+}
+
+E_EXTERN int eWindowShouldResize(EWindow window) {
+    int newWidth = { 0 };
+    int newHeight = { 0 };
+    glfwGetFramebufferSize(window->window, &newWidth, &newHeight);
+    if (newWidth == 0 || newHeight == 0) {
+        return 0;
+    }
+    return window->size.width != newWidth || window->size.height != newHeight;
+}
+
+E_EXTERN int eWindowIsMinimized(EWindow window) {
+    return glfwGetWindowAttrib(window->window, GLFW_ICONIFIED);
 }

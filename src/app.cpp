@@ -4,8 +4,6 @@
 #include "display.h"
 #include "window.h"
 
-
-#include <iostream>
 #include <string>
 
 App::App(AppCreateInfo& info) {
@@ -24,18 +22,26 @@ App::App(AppCreateInfo& info) {
     eCreateContext(&m_context);
     Check(m_context);
 
-    EDisplayCreateInfo dci{};
-    dci.context = m_context;
-    dci.window = m_window;
-    eCreateDisplay(&m_display, &dci);
+    eCreateDisplay(&m_display, m_context, m_window);
     Check(m_display);
 
     while (!static_cast<bool>(eWindowShouldClose(m_window))) {
-        break;
+        ePollEvents();
+        if (static_cast<bool>(eWindowShouldResize(m_window))) {
+            // handle resizing
+        }
+        if (static_cast<bool>(eWindowIsMinimized(m_window))) {
+            continue;
+        }
+
+        eRenderFrame(m_display, m_context, m_window);
+
+        eDisplayFrame(m_display, m_context);
     }
 }
 
 App::~App() {
+    eWaitForQueues(m_context);
     eDestroyDisplay(m_display, m_context);
     eDestroyContext(m_context);
     eDestroyWindow(m_window);

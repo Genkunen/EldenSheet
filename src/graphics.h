@@ -37,6 +37,9 @@ typedef enum EResult {
     E_NO_AVAILABLE_GRAPHICS_QUEUES,
     E_NO_AVAILABLE_WSI_SUPPORT,
 
+    E_FRAME_RENDER_ERROR,
+    E_FRAME_DISPLAY_ERROR,
+
 } EResult;
 
 E_EXTERN EResult eGetResult(void* handleIn);
@@ -52,8 +55,3 @@ typedef struct EWindowCreateInfo {
         int height;
     } size;
 } EWindowCreateInfo;
-
-typedef struct EDisplayCreateInfo {
-    EContext context;
-    EWindow window;
-} EDisplayCreateInfo;

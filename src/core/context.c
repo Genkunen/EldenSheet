@@ -64,6 +64,10 @@ E_EXTERN void eDestroyContext(EContext context) {
     free(context);
 }
 
+E_EXTERN void eWaitForQueues(EContext context) {
+    vkDeviceWaitIdle(context->device);
+}
+
 static void SelectGraphicsQueueFamilyIndex(EContext context) {
     if (context->result != E_SUCCESS) {
         return;

@@ -9,11 +9,12 @@
 struct EWindow_t {
     EResult result;
     GLFWwindow* window;
+    const char* title;
     struct {
         int width;
         int height;
     } size;
-    const char* title;
+    int shouldResize;
 };
 
 struct EContext_t {
@@ -54,8 +55,11 @@ struct EDisplay_t {
     VkSurfaceFormatKHR surfaceFormat;
     VkPresentModeKHR presentMode;
     VkRenderPass renderPass;
+    VkClearValue clearValue;
     uint32_t frameCount;
+    uint32_t frameCurrentIndex;
     uint32_t semaphoreCount;
+    uint32_t semaphoreCurrentIndex;
     int width;  // glfw forces int
     int height;
 };
