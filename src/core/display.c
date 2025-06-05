@@ -7,13 +7,14 @@
 #include <string.h>
 
 
+static void CleanFrames(EDisplay display, EContext context);
 static void CreateSurface(EDisplay display, EWindow window, EContext context);
 static void SelectSurfaceFormat(EDisplay display, EContext context);
 static void SelectPresentMode(EDisplay display);
 static void CreateSwapchain(EDisplay display, EContext context);
 static void CreateRenderPass(EDisplay display, EContext context);
 static void CreateImageViews(EDisplay display, EContext context);
-static void CleanFrames(EDisplay display, EContext context);
+static void CreateFrameBuffer(EDisplay display, EContext context);
 
 E_EXTERN void eCreateDisplay(EDisplay* displayOut, EDisplayCreateInfo* infoIn) {
     if (!displayOut) {
@@ -45,18 +46,48 @@ E_EXTERN void eCreateDisplay(EDisplay* displayOut, EDisplayCreateInfo* infoIn) {
     CreateSwapchain(display, infoIn->context);
     CreateRenderPass(display, infoIn->context);
     CreateImageViews(display, infoIn->context);
+    CreateFrameBuffer(display, infoIn->context);
 }
 
 E_EXTERN void eDestroyDisplay(EDisplay display, EContext context) {
+    struct EFrame* curr = { NULL };
     while (display->frameCount--) {
-        vkDestroyImageView(context->device,
-          display->frames[display->frameCount].imageView,
-          NULL);
+        curr = &display->frames[display->frameCount];
+        vkDestroyFramebuffer(context->device, curr->frameBuffer, NULL);
+        vkDestroyImageView(context->device, curr->imageView, NULL);
     }
     vkDestroyRenderPass(context->device, display->renderPass, NULL);
     vkDestroySwapchainKHR(context->device, display->swapchain, NULL);
     vkDestroySurfaceKHR(context->instance, display->surface, NULL);
     free(display);
+}
+
+static void CreateFrameBuffer(EDisplay display, EContext context) {
+    if (display->result != E_SUCCESS) {
+        return;
+    }
+    VkResult err = { 0 };
+
+    VkFramebufferCreateInfo fci = {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .attachmentCount = 1,
+        .width = display->width,
+        .height = display->height,
+        .layers = 1,
+        .renderPass = display->renderPass,
+    };
+    uint32_t count = { display->frameCount };
+    struct EFrame* curr = { NULL };
+    while (count--) {
+        curr = &display->frames[count];
+        fci.pAttachments = &curr->imageView;
+        err =
+          vkCreateFramebuffer(context->device, &fci, NULL, &curr->frameBuffer);
+        if (err != VK_SUCCESS) {
+            display->result = E_CREATE_FRAMEBUFFER_FAILURE;
+            return;
+        }
+    }
 }
 
 static void CreateImageViews(EDisplay display, EContext context) {
