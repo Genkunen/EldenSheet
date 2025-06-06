@@ -4,11 +4,15 @@
 #include "display.h"
 #include "window.h"
 
+#include "imgui_layer.hpp"
+
 #include <iostream>
+
 #include <string>
 
 
 App::App(AppCreateInfo& info) {
+    (void)std::cout;
     auto Check = [](void* any) {
         if (eGetResult(any) != E_SUCCESS) {
             throw std::exception(std::to_string(eGetResult(any)).c_str());
@@ -26,6 +30,8 @@ App::App(AppCreateInfo& info) {
 
     eCreateDisplay(&m_display, m_context, m_window);
     Check(m_display);
+
+    eBeginImgui(m_display, m_context, m_window);
 
     while (!static_cast<bool>(eWindowShouldClose(m_window))) {
         ePollEvents();
@@ -50,6 +56,7 @@ App::App(AppCreateInfo& info) {
 }
 
 App::~App() {
+    eEndImgui(m_context);
     eWaitForQueues(m_context);
     eDestroyDisplay(m_display, m_context);
     eDestroyContext(m_context);

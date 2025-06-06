@@ -27,7 +27,6 @@ static void DestroyDebugUtilsMessengerEXT(VkInstance instance,
 static void SelectPhysicalDevice(EContext context);
 static void SelectGraphicsQueueFamilyIndex(EContext context);
 static void CreateLogicalDevice(EContext context);
-static void CreateDescriptorPool(EContext context);
 static void CreateInstance(EContext context);
 
 
@@ -48,7 +47,6 @@ E_EXTERN void eCreateContext(EContext* contextOut) {
     SelectPhysicalDevice(context);
     SelectGraphicsQueueFamilyIndex(context);
     CreateLogicalDevice(context);
-    CreateDescriptorPool(context);
 }
 
 // cleanup
@@ -58,7 +56,6 @@ E_EXTERN void eDestroyContext(EContext context) {
     DestroyDebugUtilsMessengerEXT(
       context->instance, context->debugMessenger, NULL);
 #endif
-    vkDestroyDescriptorPool(context->device, context->descriptorPool, NULL);
     vkDestroyDevice(context->device, NULL);
     vkDestroyInstance(context->instance, NULL);
     free(context);
@@ -124,32 +121,6 @@ static void CreateLogicalDevice(EContext context) {
 
     vkGetDeviceQueue(
       context->device, context->graphicsQueueFamilyIndex, 0, &context->queue);
-}
-
-static void CreateDescriptorPool(EContext context) {
-    if (context->result != E_SUCCESS) {
-        return;
-    }
-    VkResult err = { 0 };
-    VkDescriptorPoolSize poolSizes[] = {
-        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 },
-    };
-    uint32_t maxSets = { 0 };
-    for (int i = 0; i < sizeof(poolSizes) / sizeof(*poolSizes); ++i) {
-        maxSets += poolSizes[i].descriptorCount;
-    }
-    VkDescriptorPoolCreateInfo dpci = (VkDescriptorPoolCreateInfo){
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
-        .pPoolSizes = poolSizes,
-        .poolSizeCount = sizeof(poolSizes) / sizeof(*poolSizes),
-        .maxSets = maxSets,
-    };
-    err = vkCreateDescriptorPool(
-      context->device, &dpci, NULL, &context->descriptorPool);
-    if (err != VK_SUCCESS) {
-        context->result = E_CREATE_DESCRIPTOR_POOL_FAILURE;
-    }
 }
 
 #if E_ENABLE_ERROR_CALLBACK

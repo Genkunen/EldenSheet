@@ -26,7 +26,6 @@ struct EContext_t {
     VkPhysicalDevice physicalDevice;
     VkDevice device;
     VkQueue queue;
-    VkDescriptorPool descriptorPool;
     const char** exts;
     uint32_t extsCount;
     uint32_t graphicsQueueFamilyIndex;
@@ -62,4 +61,14 @@ struct EDisplay_t {
     uint32_t semaphoreCurrentIndex;
     int width;  // glfw forces int
     int height;
+};
+
+struct ERenderer_t {
+    EResult result;
+    VkSampler sampler;
+    VkDescriptorSetLayout descSetLayout;
+    VkDescriptorPool descPool;
+    VkPipelineLayout pipelineLayout;
+    VkPipeline pipeline;
+    uint32_t descPoolSize;
 };

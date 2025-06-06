@@ -32,14 +32,20 @@ deps += cc.find_library(
     static: true
 )
 
-subdir('src')
+app_srcs = []
+
+# creates static library imgui
+subdir('libs/imgui')
+# creates static library core
 subdir('src/core')
+# gathers app source files
+subdir('src')
 
 configure_file(input: 'config.in', output: 'config.h', configuration: conf)
 
 executable(
     meson.project_name(), 
-    cpp_srcs, 
+    app_srcs, 
     dependencies: deps,
     link_with: libs,
     include_directories: incs,

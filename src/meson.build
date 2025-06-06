@@ -1,4 +1,4 @@
-cpp_srcs = files(
-    'main.cpp',
+app_srcs += files(
     'app.cpp',
+    'main.cpp',
 )
