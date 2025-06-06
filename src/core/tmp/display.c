@@ -31,6 +31,12 @@ E_EXTERN void
 
     glfwGetFramebufferSize(window->window, &display->width, &display->height);
 
+    printf("Window: %dx%d, Display: %dx%d\n",
+      window->size.width,
+      window->size.height,
+      display->width,
+      display->height);
+
     CreateSurface(display, context, window);
     SelectSurfaceFormat(display, context);
     SelectPresentMode(display);
@@ -95,9 +101,17 @@ E_EXTERN void
     window->size.width = display->width;
     window->size.height = display->height;
 
+    printf("Window: %dx%d, Display: %dx%d\n",
+      window->size.width,
+      window->size.height,
+      display->width,
+      display->height);
+
     CreateSwapchain(display, context, window);
     CreateRenderPass(display, context);
+    printf("\nbef\n");
     CreateImageViews(display, context);
+    printf("\naft\n");
     CreateFrameBuffer(display, context);
     CreateCommandBuffer(display, context);
 
@@ -534,7 +548,7 @@ static void
         display->frames[i].image = images[i];
     }
     if (oldSwapchain) {
-        vkDestroySwapchainKHR(context->device, oldSwapchain, NULL);
+        vkDestroySwapchainKHR(context->device, display->swapchain, NULL);
     }
 }
 
