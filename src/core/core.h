@@ -63,6 +63,13 @@ struct EDisplay_t {
     int height;
 };
 
+struct ETexture_t {
+    VkDeviceMemory memory;
+    VkImage image;
+    VkImageView imageView;
+    VkDescriptorSet descriptorSet;
+};
+
 struct ERenderer_t {
     EResult result;
     VkSampler sampler;
@@ -70,5 +77,8 @@ struct ERenderer_t {
     VkDescriptorPool descPool;
     VkPipelineLayout pipelineLayout;
     VkPipeline pipeline;
+    VkShaderModule vertShader;
+    VkShaderModule fragShader;
     uint32_t descPoolSize;
+    ETexture texture;
 };

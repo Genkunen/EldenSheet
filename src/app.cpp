@@ -43,6 +43,8 @@ App::App(AppCreateInfo& info) {
             continue;
         }
 
+        eDrawImgui(m_display, m_context, m_window);
+
         if (!static_cast<bool>(eWindowShouldResize(m_window))) {
             eRenderFrame(m_display, m_context, m_window);
             Check(m_display);

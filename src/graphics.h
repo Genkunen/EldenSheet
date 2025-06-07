@@ -52,6 +52,7 @@ E_OPAQUE_HANDLE(EContext);
 E_OPAQUE_HANDLE(EWindow);
 E_OPAQUE_HANDLE(EDisplay);
 E_OPAQUE_HANDLE(ERenderer);
+E_OPAQUE_HANDLE(ETexture);
 
 typedef struct EWindowCreateInfo {
     const char* title;
@@ -60,3 +61,15 @@ typedef struct EWindowCreateInfo {
         int height;
     } size;
 } EWindowCreateInfo;
+
+struct EImguiVertData {
+    const uint32_t* inputAttrOffsets;
+    uint32_t inputAttrCount;
+    uint32_t inputAttrSize;
+};
+
+typedef struct ERendererCreateInfo {
+    EContext context;
+    EDisplay display;
+    struct EImguiVertData imguiVertData;
+} ERendererCreateInfo;
